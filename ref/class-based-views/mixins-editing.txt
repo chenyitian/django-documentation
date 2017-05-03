@@ -1,0 +1,192 @@
+==============
+编辑 Mixin
+==============
+
+以下 Mixin 用于构建 Django 的编辑视图：
+
+* :class:`django.views.generic.edit.FormMixin`
+* :class:`django.views.generic.edit.ModelFormMixin`
+* :class:`django.views.generic.edit.ProcessFormView`
+* :class:`django.views.generic.edit.DeletionMixin`
+
+.. note::
+
+    如何将这些组合成编辑视图的示例，请参见 :doc:`/ref/class-based-views/generic-editing` 的文档。
+
+``FormMixin``
+=============
+
+.. class:: django.views.generic.edit.FormMixin
+
+    一个提供创建和显示表单的功能的 Mixin 类。
+
+    **混合**
+
+    * :class:`django.views.generic.base.ContextMixin`
+
+    **方法和属性**
+
+    .. attribute:: initial
+
+        包含表单初始数据的字典。
+
+    .. attribute:: form_class
+
+        要实例化的窗体类。
+
+    .. attribute:: success_url
+
+        表单成功处理后重定向到的 URL。
+
+    .. attribute:: prefix
+
+        生成的表单的 :attr:`~django.forms.Form.prefix`。
+
+    .. method:: get_initial()
+
+        检索表单的初始数据。默认情况下，返回 :attr:`~django.views.generic.edit.FormMixin.initial` 的副本。
+
+    .. method:: get_form_class()
+
+        检索要实例化的表单类。默认情况下为 :attr:`.form_class`。
+
+    .. method:: get_form(form_class=None)
+
+        使用 :meth:`~django.views.generic.edit.FormMixin.get_form_kwargs` 实例化 ``form_class`` 的实例。如果不提供 ``form_class`` 将会使用 :meth:`get_form_class`。
+
+    .. method:: get_form_kwargs()
+
+        构建实例化表单所需的关键字参数。
+
+        ``initial`` 参数设置为 :meth:`.get_initial`。如果请求是 ``POST`` 或 ``PUT``，请求数据（``request.POST`` 和 ``request.FILES``）将也可提供。
+
+    .. method:: get_prefix()
+
+        为生成的表单确定 :attr:`~django.forms.Form.prefix` 。默认返回 :attr:`~django.views.generic.edit.FormMixin.prefix`。
+
+    .. method:: get_success_url()
+
+        确定在表单成功验证后重定向到的网址。默认返回 :attr:`~django.views.generic.edit.FormMixin.success_url`。
+
+    .. method:: form_valid(form)
+
+        重定向到 :meth:`~django.views.generic.edit.FormMixin.get_success_url`。
+
+    .. method:: form_invalid(form)
+
+        呈现响应，提供无效形式作为上下文。
+
+    .. method:: get_context_data(**kwargs)
+
+        .. versionadded:: 1.9
+
+        调用 :meth:`get_form` 并把结果以 'form' 命名添加到上下文数据。
+
+``ModelFormMixin``
+==================
+
+.. class:: django.views.generic.edit.ModelFormMixin
+
+    一个在 ``ModelForms`` 上工作的表单 Mixin，而不是一个独立的表单。
+
+    因为这是 :class:`~django.views.generic.detail.SingleObjectMixin` 的子类，所以这个 Mixin 的实例可以访问 :attr:`~django.views.generic.detail.SingleObjectMixin.model` 和
+    :attr:`~django.views.generic.detail.SingleObjectMixin.queryset` 属性来表示 ``ModelForm`` 正在操作的对象的类型。
+
+    如果你同时指定 :attr:`~django.views.generic.edit.ModelFormMixin.fields` 和 :attr:`~django.views.generic.edit.FormMixin.form_class` 属性，则会抛出 :exc:`~django.core.exceptions.ImproperlyConfigured` 异常。
+
+    **混合**
+
+    * :class:`django.views.generic.edit.FormMixin`
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+
+    **方法和属性**
+
+    .. attribute:: model
+
+        模型类。可以明确提供，否则将通过检查 ``self.object`` 或 :attr:`~django.views.generic.detail.SingleObjectMixin.queryset` 来确定。
+
+    .. attribute:: fields
+
+        字段名称列表。其解释方式与 :class:`~django.forms.ModelForm` 的 ``Meta.fields`` 属性相同。
+
+        这是一个必需的属性，如果你是自动生成表单类（例如。使用 ``model``）。省略此属性将导致 :exc:`~django.core.exceptions.ImproperlyConfigured` 异常。
+
+    .. attribute:: success_url
+
+        表单成功处理后重定向到的 URL。
+
+        ``success_url`` 可能包含字典字符串格式，它将根据对象的字段属性进行插值。例如，您可以使用 ``success_url="/polls/{slug}/"`` 重定向到模型上 ``slug`` 字段组成的 URL。
+
+    .. method:: get_form_class()
+
+        检索要实例化的表单类。如果提供 :attr:`~django.views.generic.edit.FormMixin.form_class`，那么将使用该类。否则，将使用与 :attr:`~django.views.generic.detail.SingleObjectMixin.queryset`, 或 with the :attr:`~django.views.generic.detail.SingleObjectMixin.model` 关联的模型实例化 ``ModelForm``，具体取决于提供的属性。
+
+    .. method:: get_form_kwargs()
+
+        将当前实例（``self.object``）添加到标准 :meth:`~django.views.generic.edit.FormMixin.get_form_kwargs`。
+
+    .. method:: get_success_url()
+
+        确定在表单成功验证后重定向到的网址。如果提供，返回 :attr:`django.views.generic.edit.ModelFormMixin.success_url` 否则，尝试使用对象的 ``get_absolute_url()``。
+
+    .. method:: form_valid(form)
+
+        保存表单实例，设置视图的当前对象，然后重定向到 :meth:`~django.views.generic.edit.FormMixin.get_success_url`。
+
+    .. method:: form_invalid()
+
+        呈现响应，提供无效形式作为上下文。
+
+
+``ProcessFormView``
+===================
+
+.. class:: django.views.generic.edit.ProcessFormView
+
+    一个提供基本的 HTTP GET 和 POST 工作流的 Mixin。
+
+    .. note::
+
+        这被命名为 ‘ProcessFormView’，并直接从 :class:`django.views.generic.base.View` 继承，但如果独立使用则中断，因此它更多是混合。
+
+    **延伸**
+
+    * :class:`django.views.generic.base.View`
+
+    **方法和属性**
+
+    .. method:: get(request, *args, **kwargs)
+
+        使用通过 :meth:`~django.views.generic.edit.FormMixin.get_context_data` 创建的上下文来渲染响应。
+
+        .. versionchanged:: 1.9
+
+            表单的构造从此方法移动到了 :meth:`~django.views.generic.edit.FormMixin.get_context_data`。
+
+    .. method:: post(request, *args, **kwargs)
+
+        构造一个表单，检查表单的有效性，并相应地处理。
+
+    .. method:: put(*args, **kwargs)
+
+        ``PUT`` 操作也被处理，并且将所有参数传递到 :meth:`post`。
+
+
+``DeletionMixin``
+=================
+
+.. class:: django.views.generic.edit.DeletionMixin
+
+    启用对 ``DELETE`` HTTP 操作的处理。
+
+    **方法和属性**
+
+    .. attribute:: success_url
+
+        指定对象已成功删除时重定向到的网址。
+
+        ``success_url`` 可能包含字典字符串格式，它将根据对象的字段属性进行插值。例如，您可以使用 ``success_url="/parent/{parent_id}/"`` 重定向到模型上 ``parent_id`` 字段组成的 URL。
+
+    .. method:: get_success_url()
+
+        返回当指定的对象已成功删除时重定向到的网址。默认返回 :attr:`~django.views.generic.edit.DeletionMixin.success_url`。

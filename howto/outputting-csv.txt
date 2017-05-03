@@ -1,0 +1,135 @@
+==========================
+使用 Django 输出 CSV
+==========================
+
+这篇文档阐述了如何通过使用 Django 视图动态输出 CSV（Comma Separated Values）。你可以使用 Python CSV 库或者 Django 的模板系统来达到目的。
+
+使用 Python CSV 库
+============================
+
+Python 自带了 CSV 库，:mod:`csv`。在 Django 中使用它的关键是，:mod:`csv` 模块的 CSV 创建功能作用于类似于文件的对象，并且 Django 的 :class:`~django.http.HttpResponse` 对象就是类似于文件的对象。
+
+这里是个例子::
+
+    import csv
+    from django.http import HttpResponse
+
+    def some_view(request):
+        # Create the HttpResponse object with the appropriate CSV header.
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="somefilename.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['First row', 'Foo', 'Bar', 'Baz'])
+        writer.writerow(['Second row', 'A', 'B', 'C', '"Testing"', "Here's a quote"])
+
+        return response
+
+代码和注释是不用多说的，但是一些事情需要提醒一下：
+
+* 响应对象获得了一个特殊的MIME类型，:mimetype:`text/csv`。这会告诉浏览器，文档是个 CSV 文件而不是 HTML 文件。如果你把它去掉，浏览器可能会把输出解释为 HTML，会在浏览器窗口中显示一篇丑陋的、可怕的天书。
+
+* 响应对象获取了附加的 ``Content-Disposition`` 协议头，它含有 CSV 文件的名称。文件名可以是任意的；你想把它叫做什么都可以。浏览器会在“另存为...”对话框等地方使用它。
+
+* 和 CSV 生成 API 挂钩非常简单：只需要把 ``response`` 作为第一个参数传递给 ``csv.writer``。``csv.writer`` 函数接受一个类似于文件的对象，而 :class:`~django.http.HttpResponse` 对象正好合适。
+
+* 对于你 CSV 文件的每一行，调用 ``writer.writerow``，向它传递一个可迭代的对象比如列表或者元组。
+
+* CSV 模板会为你处理引号，所以你不用担心没有转义字符串中的引号或者逗号。只需要向 ``writerow()`` 传递你的原始字符串，它就会执行正确的操作。
+
+.. admonition:: 在 Python 2 中处理 Unicode
+
+    Python 2 的 :mod:`csv` 模块不支持 Unicode 输入。由于 Django 在内部使用 Unicode，这意味着从一些来源比如 :class:`~django.http.HttpRequest` 读出来的字符串可能导致潜在的问题。有一些可选项用于处理它：
+
+    * 手动将所有 Unicode 对象编码为兼容的编码。
+
+    * 使用 `csv 模块的示例章节`_ 中提供的 ``UnicodeWriter`` 类。
+
+    * 使用 `python-unicodecsv 模块`_，它作为 :mod:`csv` 模块随时可用的替代方案，能够优雅地处理 Unicode。
+
+    更多信息请见 :mod:`csv` 模块的 Python 文档。
+
+    .. _`csv 模块的示例章节`: https://docs.python.org/2/library/csv.html#examples
+    .. _`python-unicodecsv 模块`: https://github.com/jdunck/python-unicodecsv
+
+.. _streaming-csv-files:
+
+流式传输大尺寸 CSV 文件
+-------------------------
+
+当处理生成大尺寸响应的视图时，你可能想要使用 Django 的 :class:`~django.http.StreamingHttpResponse` 类。例如，通过流式传输需要长时间来生成的文件，可以避免负载均衡器在服务器生成响应的时候断掉连接。
+
+在这个例子中，我们利用 Python 的生成器来有效处理大尺寸 CSV 文件的拼接和传输::
+
+    import csv
+
+    from django.utils.six.moves import range
+    from django.http import StreamingHttpResponse
+
+    class Echo(object):
+        """An object that implements just the write method of the file-like
+        interface.
+        """
+        def write(self, value):
+            """Write the value by returning it, instead of storing in a buffer."""
+            return value
+
+    def some_streaming_csv_view(request):
+        """A view that streams a large CSV file."""
+        # Generate a sequence of rows. The range is based on the maximum number of
+        # rows that can be handled by a single sheet in most spreadsheet
+        # applications.
+        rows = (["Row {}".format(idx), str(idx)] for idx in range(65536))
+        pseudo_buffer = Echo()
+        writer = csv.writer(pseudo_buffer)
+        response = StreamingHttpResponse((writer.writerow(row) for row in rows),
+                                         content_type="text/csv")
+        response['Content-Disposition'] = 'attachment; filename="somefilename.csv"'
+        return response
+
+使用模板系统
+=========================
+
+或者，你可以使用 :doc:`Django 模板系统 </topics/templates>` 来生成 CSV。比起便捷的 Python :mod:`csv` 模板来说，这样比较低级，但是为了完整性，这个解决方案还是在这里展示一下。
+
+它的想法是，传递一个项目的列表给你的模板，并且让模板在 :ttag:`for` 循环中输出逗号。
+
+这里是一个例子，它像上面一样生成相同的 CSV 文件::
+
+    from django.http import HttpResponse
+    from django.template import loader, Context
+
+    def some_view(request):
+        # Create the HttpResponse object with the appropriate CSV header.
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="somefilename.csv"'
+
+        # The data is hard-coded here, but you could load it from a database or
+        # some other source.
+        csv_data = (
+            ('First row', 'Foo', 'Bar', 'Baz'),
+            ('Second row', 'A', 'B', 'C', '"Testing"', "Here's a quote"),
+        )
+
+        t = loader.get_template('my_template_name.txt')
+        c = Context({
+            'data': csv_data,
+        })
+        response.write(t.render(c))
+        return response
+
+这个例子和上一个例子之间唯一的不同就是，这个例子使用模板来加载，而不是CSV模块。代码的结果 —— 比如 ``content_type='text/csv'`` —— 都是相同的。
+
+然后，创建模板 ``my_template_name.txt``，带有以下模板代码：
+
+.. code-block:: html+django
+
+    {% for row in data %}"{{ row.0|addslashes }}", "{{ row.1|addslashes }}", "{{ row.2|addslashes }}", "{{ row.3|addslashes }}", "{{ row.4|addslashes }}"
+    {% endfor %}
+
+这个模板十分基础。它仅仅遍历了提供的数据，并且对于每一行都展示了一行 CSV。它使用了 :tfilter:`addslashes` 模板过滤器来确保没有任何引号上的问题。
+
+其它基于文本的格式
+========================
+
+要注意对于 CSV 来说，这里并没有什么特别之处 —— 只是特定了输出格式。你可以使用这些技巧中的任何一个，来输出任何你想要的，基于文本的格式。你也可以使用相似的技巧来生成任意的二进制数据。例子请参见 :doc:`/howto/outputting-pdf`。

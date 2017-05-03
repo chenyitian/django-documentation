@@ -1,0 +1,61 @@
+=========================================
+将遗留数据库整合到 Django
+=========================================
+
+虽然 Django 最适合用来开发新的应用，但也可以将它整合到遗留的数据库中。Django 包含了很多工具，尽可能自动化解决这类问题。
+
+这篇文章假设你了解 Django 的基础部分，它们在 :doc:`教程 </intro/tutorial01>` 中提及。
+
+一旦你的 Django 环境建立好之后，你可以按照这个大致的流程，整合你的现有数据库。
+
+向 Django 提供你的数据库参数
+====================================
+
+你需要告诉 Django 你的数据库连接参数，以及数据库的名称。请修改 :setting:`DATABASES` 设置，为``'default'`` 连接的以下键赋值：
+
+* :setting:`NAME`
+* :setting:`ENGINE <DATABASE-ENGINE>`
+* :setting:`USER`
+* :setting:`PASSWORD`
+* :setting:`HOST`
+* :setting:`PORT`
+
+自动生成模型
+========================
+
+.. highlight:: bash
+
+Django 自带叫做 :djadmin:`inspectdb` 的工具，可以按照现有的数据库创建模型。你可以运行以下命令，并查看输出::
+
+    $ python manage.py inspectdb
+
+通过重定向 Unix 标准输出流来保存文件::
+
+    $ python manage.py inspectdb > models.py
+
+这个特性是一个快捷方式，并不是一个确定的模型生成器。详见 :djadmin:`inspectdb 文档 <inspectdb>`。
+
+一旦你创建好了你的模型，把文件命名为 ``models.py``，然后把它放到你应用的 Python 包中。然后把应用添加到你的 :setting:`INSTALLED_APPS` 设置中。
+
+默认情况下，:djadmin:`inspectdb` 创建未被管理的模型。这就是说，模型的 ``Meta`` 类中的 ``managed = False`` 告诉 Django 不要管理每个表的创建、修改和删除::
+
+    class Person(models.Model):
+        id = models.IntegerField(primary_key=True)
+        first_name = models.CharField(max_length=70)
+        class Meta:
+           managed = False
+           db_table = 'CENSUS_PERSONS'
+
+如果你希望 Django 管理表的生命周期，你需要把 :attr:`~django.db.models.Options.managed` 选项改为 ``True``（或者简单地把它移除，因为 ``True`` 是默认值）。
+
+安装 Django 核心表
+==============================
+
+接下来，运行 :djadmin:`migrate` 命令来安装所有所需的额外的数据库记录，比如后台权限和内容类型::
+
+    $ python manage.py migrate
+
+测试和调整
+==============
+
+上面就是所有基本的步骤了 —— 到目前为止你会想要调整 Django 自动生成的模型，直到他们按照你想要的方式工作。尝试通过 Django 数据库 API 访问你的数据，并且尝试使用 Django 后台页面编辑对象，以及相应地编辑模型文件。

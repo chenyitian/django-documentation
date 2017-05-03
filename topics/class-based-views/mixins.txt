@@ -1,0 +1,401 @@
+===================================
+使用基于类的视图的 Mixin
+===================================
+
+.. caution::
+
+    这是一个进阶的话题。需要建立在了解 :doc:`Django 的基于类的视图 <index>` 的基础上。
+
+Django 的基于类的视图提供了许多功能，但是你可能只想使用其中的一部分。例如，你想编写一个视图，它渲染模板来响应 HTTP，但是你用不了 :class:`~django.views.generic.base.TemplateView`；或者你只需要对 ``POST`` 请求渲染一个模板，而 ``GET`` 请求做一些其它的事情。虽然你可以直接使用 :class:`~django.template.response.TemplateResponse`，但是这将导致重复的代码。
+
+由于这些原因，Django 提供许多 Mixin，它们提供更细致的功能。例如，渲染模板封装在 :class:`~django.views.generic.base.TemplateResponseMixin` 中。Django 参考手册包含 :doc:`所有 Mixin 的完整文档 </ref/class-based-views/mixins>`。
+
+上下文和模板响应
+==============================
+
+在基于类的视图中使用模板具有一致的接口，有两个 Mixin 起了核心的作用。
+
+:class:`~django.views.generic.base.TemplateResponseMixin`
+    返回 :class:`~django.template.response.TemplateResponse` 的每个视图都将调用 :meth:`~django.views.generic.base.TemplateResponseMixin.render_to_response()` 方法，这个方法由 ``TemplateResponseMixin`` 提供。大部分时候，这个方法会隐式调用（例如，它会被 :class:`~django.views.generic.base.TemplateView` 和 :class:`~django.views.generic.detail.DetailView` 中实现的 ``get()`` 方法调用）；如果你不想通过 Django 的模板渲染响应，那么你可以覆盖它，虽然通常不需要这样。其示例用法请参见 :ref:`JSONResponseMixin 示例 <jsonresponsemixin-example>`。
+
+    ``render_to_response()`` 本身调用 :meth:`~django.views.generic.base.TemplateResponseMixin.get_template_names`，它默认查找类视图的 :attr:`~django.views.generic.base.TemplateResponseMixin.template_name`；其它两个 Mixin（:class:`~django.views.generic.detail.SingleObjectTemplateResponseMixin` 和 :class:`~django.views.generic.list.MultipleObjectTemplateResponseMixin`）覆盖了这个方法，以在处理实际的对象时能提供更灵活的默认行为。
+
+:class:`~django.views.generic.base.ContextMixin`
+    需要上下文数据的每个内建视图，例如渲染模板的视图（包括 ``TemplateResponseMixin``），都应该以关键字参数调用 :meth:`~django.views.generic.base.ContextMixin.get_context_data()`，以确保它们想要的数据在里面。``get_context_data()`` 返回一个字典；在 ``ContextMixin`` 中，它只是简单地返回它的关键字参数，通常会覆盖这个方法来向字典中添加更多的成员。
+
+构建 Django 的基于类的通用视图函数
+==============================================
+
+让我们看下 Django 的两个通用的基于类的视图是如何通过互不相关的 Mixin 构建的。我们将考虑 :class:`~django.views.generic.detail.DetailView`，它渲染一个对象的“详细”视图，和 :class:`~django.views.generic.list.ListView`，它渲染一个对象列表，通常来自一个查询集，需要时还会分页。这将会向我们接收四个 Mixin，这些 Mixin 在用到单个或多个 Django 对象时非常有用。
+
+在通用的编辑视图（:class:`~django.views.generic.edit.FormView` 和模型相关的视图 :class:`~django.views.generic.edit.CreateView`、:class:`~django.views.generic.edit.UpdateView` 和 :class:`~django.views.generic.edit.DeleteView`）和基于日期的通用视图中都会涉及到 Mixin。它们在 :doc:`Mixin 参考文档</ref/class-based-views/mixins>` 中讲述。
+
+``DetailView``：用于单个 Django 对象
+---------------------------------------------------
+
+为了显示一个对象的详细信息，我们通常需要做两件事情：查询对象然后利用合适的模板和包含该对象的上下文生成 :class:`~django.template.response.TemplateResponse`。
+
+为了获得对象，:class:`~django.views.generic.detail.DetailView` 依赖 :class:`~django.views.generic.detail.SingleObjectMixin`，它提供一个 :meth:`~django.views.generic.detail.SingleObjectMixin.get_object` 方法，这个方法基于请求的 URL 获取对象（它查找 URLconf 中声明的 ``pk`` 和 ``slug`` 关键字参数，然后从视图的 :attr:`~django.views.generic.detail.SingleObjectMixin.model` 属性或提供的 :attr:`~django.views.generic.detail.SingleObjectMixin.queryset` 属性查询对象）。``SingleObjectMixin`` 还覆盖 :meth:`~django.views.generic.base.ContextMixin.get_context_data()`，这个方法在 Django 所有的内建的基于类的视图中都有用到，用来给模板的渲染提供上下文数据。
+
+然后，为了生成 :class:`~django.template.response.TemplateResponse`，:class:`DetailView` 使用 :class:`~django.views.generic.detail.SingleObjectTemplateResponseMixin`，它扩展自 :class:`~django.views.generic.base.TemplateResponseMixin` 并覆盖上文讨论过的 :meth:`~django.views.generic.base.TemplateResponseMixin.get_template_names()`。实际上，它提供比较复杂的选项集合，但是大部分人用到的主要的一个是 ``<app_label>/<model_name>_detail.html``。``_detail`` 部分可以通过设置子类的 :attr:`~django.views.generic.detail.SingleObjectTemplateResponseMixin.template_name_suffix` 来改变。（例如，:doc:`通用的编辑视图 <generic-editing>` 使用 ``_form`` 来创建和更新视图，用 ``_confirm_delete`` 来删除视图）。
+
+``ListView``：用于多个 Django 对象
+----------------------------------------------
+
+显示对象的列表和上面的步骤大体相同：我们需要一个对象的列表（可能是分页形式的），这通常是一个 :class:`~django.db.models.query.QuerySet`，然后我们需要利用合适的模板和对象列表生成一个 :class:`~django.template.response.TemplateResponse`。
+
+为了获取对象，:class:`~django.views.generic.list.ListView` 使用 :class:`~django.views.generic.list.MultipleObjectMixin`，它提供 :meth:`~django.views.generic.list.MultipleObjectMixin.get_queryset` 和 :meth:`~django.views.generic.list.MultipleObjectMixin.paginate_queryset` 两种方法。与 :class:`~django.views.generic.detail.SingleObjectMixin` 不同，不需要根据URL 中关键字参数来获得查询集，默认将使用视图类的 :attr:`~django.views.generic.list.MultipleObjectMixin.queryset` 或 :attr:`~django.views.generic.list.MultipleObjectMixin.model` 属性。通常需要覆盖 :meth:`~django.views.generic.list.MultipleObjectMixin.get_queryset` 以动态获取不同的对象，例如根据当前的用户或排除打算在将来提交的博客。
+
+:class:`~django.views.generic.list.MultipleObjectMixin` 还覆盖 :meth:`~django.views.generic.base.ContextMixin.get_context_data()` 以包含合适的上下文变量用于分页（如果禁止分页，则提供一些假的）。这个方法依赖传递给它的关键字参数 ``object_list``，:class:`ListView` 会负责准备好这个参数。
+
+为了生成 :class:`~django.template.response.TemplateResponse`，:class:`ListView` 然后使用 :class:`~django.views.generic.list.MultipleObjectTemplateResponseMixin`；与上面的 :class:`~django.views.generic.detail.SingleObjectTemplateResponseMixin` 类似，它覆盖 ``get_template_names()`` 来提供 :meth:`一系列的选项 <django.views.generic.list.MultipleObjectTemplateResponseMixin>`，而最常用到的是 ``<app_label>/<model_name>_list.html``，其中 ``_list`` 部分同样由 :attr:`~django.views.generic.list.MultipleObjectTemplateResponseMixin.template_name_suffix` 属性设置。（基于日期的通用视图使用 ``_archive``、``_archive_year`` 等等这样的后缀来针对各种基于日期的列表视图使用不同的模板）。
+
+使用 Django 的基于类的视图的 Mixin
+======================================
+
+既然我们已经看到 Django 通用的基于类的视图时如何使用 Mixin，让我们在看看其它组合它们的方式。当然，我们仍将它们与内建的基于类的视图或其它通用的基于类的视图组合，但是对于 Django 提供的便利性你将解决一些更加罕见的问题。
+
+.. warning::
+
+    不是所有的 Mixin 都可以一起使用，也不是所有的基于类的视图都可以与其它 Mixin 一起使用。这里我们展示的是可以工作的几个例子；如果你需要其它功能，那么你必须考虑不同类之间的属性和方法的相互作用，以及 `方法解析顺序`_ 将如何影响方法调用的版本和顺序。
+
+    Django 的 :doc:`基于类的视图 </ref/class-based-views/index>` 和 :doc:`基于类的视图的 Mixin </ref/class-based-views/mixins>` 的文档将帮助你理解在不同的类和 Mixin 之间那些属性和方法可能引起冲突。
+
+    如果有担心，通常最好退避并基于 :class:`View` 或 :class:`TemplateView`，或者可能的话加上 :class:`~django.views.generic.detail.SingleObjectMixin` 和 :class:`~django.views.generic.list.MultipleObjectMixin`。虽然你可能最终会编写更多的代码，但是对于后来的人更容易理解，而且你自己也少了份担心。（当然，你始终可以深入探究 Django 中基于类的通用视图的具体实现以获取如何处理出现的问题的灵感。）
+
+.. _方法解析顺序: https://www.python.org/download/releases/2.3/mro/
+
+将 ``SingleObjectMixin`` 用于 ``View``
+--------------------------------------------
+
+如果你想编写一个简单的基于类的视图，它只响应 ``POST``，我们将子类化 :class:`~django.views.generic.base.View` 并在子类中只编写一个 ``post()`` 方法。但是，如果我们想处理一个由URL 标识的特定对象，我们将需要 :class:`~django.views.generic.detail.SingleObjectMixin` 提供的功能。
+
+我们将使用在 :doc:`通用的基于类的视图简介 <generic-display>` 中用到的 ``Author`` 模型做演示。
+
+.. snippet::
+    :filename: views.py
+
+    from django.http import HttpResponseForbidden, HttpResponseRedirect
+    from django.urls import reverse
+    from django.views import View
+    from django.views.generic.detail import SingleObjectMixin
+    from books.models import Author
+
+    class RecordInterest(SingleObjectMixin, View):
+        """Records the current user's interest in an author."""
+        model = Author
+
+        def post(self, request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return HttpResponseForbidden()
+
+            # Look up the author we're interested in.
+            self.object = self.get_object()
+            # Actually record interest somehow here!
+
+            return HttpResponseRedirect(reverse('author-detail', kwargs={'pk': self.object.pk}))
+
+实际应用中，你的对象可能以键-值的方式保存而不是保存在关系数据库中，所以我们不考虑这点。使用 :class:`~django.views.generic.detail.SingleObjectMixin` 的视图唯一需要担心的是在哪里查询我们感兴趣的作者，而它会用一个简单的 ``self.get_object()`` 调用实现。其它的所有事情都有该 Mixin 帮我们处理。
+
+我们可以将它这样放入 URL 中，非常简单：
+
+.. snippet::
+    :filename: urls.py
+
+    from django.conf.urls import url
+    from books.views import RecordInterest
+
+    urlpatterns = [
+        #...
+        url(r'^author/(?P<pk>[0-9]+)/interest/$', RecordInterest.as_view(), name='author-interest'),
+    ]
+
+注意 ``pk`` 命名组，:meth:`~django.views.generic.detail.SingleObjectMixin.get_object` 将用它来查询 ``Author`` 实例。你还可以使用 slug，或者 :class:`~django.views.generic.detail.SingleObjectMixin` 的其它功能。
+
+将 ``SingleObjectMixin`` 用于 ``ListView``
+---------------------------------------------
+
+:class:`~django.views.generic.list.ListView` 提供内建的分页，但是可能你分页的列表中每个对象都与另外一个对象（通过一个外键）关联。在我们的 Publishing 例子中，你可能想通过一个特定的出版商分页所有的图书。
+
+一种方法是组合 :class:`ListView` 和 :class:`~django.views.generic.detail.SingleObjectMixin`，这样分页的图书列表的查询集能够与找到的单个出版商对象关联。为了实现这点，我们需要两个不同的查询集：
+
+:class:`~django.views.generic.list.ListView` 使用的 ``Book`` 查询集
+    由于我们可以访问要列出其图书的 ``Publisher``，我们简单地重写 ``get_queryset()`` 并使用 ``Publisher`` 的 :ref:`反向外键管理器 <backwards-related-objects>`。
+
+用于 :meth:`~django.views.generic.detail.SingleObjectMixin.get_object()` 中的 ``Publisher`` 查询集
+    我们将依靠 ``get_object()`` 的默认实现来获取正确的 ``Publisher`` 对象。但是，我们需要显式地传递一个 ``queryset`` 参数，否则 ``get_object()`` 的默认实现将调用 ``get_queryset()``，我们已经重写成返回 ``Book`` 对象而不是 ``Publisher`` 了。
+
+.. note::
+
+    我们必须仔细考虑 ``get_context_data()``。因为 :class:`~django.views.generic.detail.SingleObjectMixin` 和 :class:`ListView` 都将上下文数据中的东西置于 ``context_object_name`` 的值之下，我们必须显式确保 ``Publisher`` 位于上下文数据中。:class:`ListView` 将为我们添加合适的 ``page_obj`` 和 ``paginator``，只要我们记住调用 ``super()``。
+
+现在，我们可以编写一个新的 ``PublisherDetail``::
+
+    from django.views.generic import ListView
+    from django.views.generic.detail import SingleObjectMixin
+    from books.models import Publisher
+
+    class PublisherDetail(SingleObjectMixin, ListView):
+        paginate_by = 2
+        template_name = "books/publisher_detail.html"
+
+        def get(self, request, *args, **kwargs):
+            self.object = self.get_object(queryset=Publisher.objects.all())
+            return super(PublisherDetail, self).get(request, *args, **kwargs)
+
+        def get_context_data(self, **kwargs):
+            context = super(PublisherDetail, self).get_context_data(**kwargs)
+            context['publisher'] = self.object
+            return context
+
+        def get_queryset(self):
+            return self.object.book_set.all()
+
+注意我们在 ``get()`` 方法里设置了 ``self.object``，这样我们就可以在后面的 ``get_context_data()`` 和 ``get_queryset()`` 方法里再次用到它。如果不设置 ``template_name``，那模板会指向默认的 :class:`ListView` 所选择的模板, 也就是 ``"books/book_list.html"``，因为这个模板是书目的一个列表；但 :class:`ListView` 对于该类继承了 :class:`~django.views.generic.detail.SingleObjectMixin` 这个类是一无所知的，所以不会对使用 ``Publisher`` 来查看视图有任何反应.
+
+``paginate_by`` 是每页显示几条数据的意思，这里设的比较小，是因为这样你就不用造一堆数据才能看到分页的效果了！下面是你想要的模板:
+
+.. code-block:: html+django
+
+    {% extends "base.html" %}
+
+    {% block content %}
+        <h2>Publisher {{ publisher.name }}</h2>
+
+        <ol>
+          {% for book in page_obj %}
+            <li>{{ book.title }}</li>
+          {% endfor %}
+        </ol>
+
+        <div class="pagination">
+            <span class="step-links">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+                {% endif %}
+
+                <span class="current">
+                    Page {{ page_obj.number }} of {{ paginator.num_pages }}.
+                </span>
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}">next</a>
+                {% endif %}
+            </span>
+        </div>
+    {% endblock %}
+
+避免让事情复杂化
+===========================
+
+通常情况下你只在需要相关功能时才会使用 :class:`~django.views.generic.base.TemplateResponseMixin` 和 :class:`~django.views.generic.detail.SingleObjectMixin` 这两个类。如上所示，只要加点儿小心，你甚至可以把 ``SingleObjectMixin`` 和 :class:`~django.views.generic.list.ListView` 结合在一起来使用。但是这么搞可能会让事情变得有点复杂，作为一个好的原则：
+
+.. hint::
+
+    你的视图扩展应该仅仅使用那些来自于同一组通用基类的视图或者 Mixin。如：:doc:`detail, list<generic-display>`、:doc:`editing<generic-editing>` 和 date。例如：把 :class:`TemplateView` （内建视图）和 :class:`~django.views.generic.list.MultipleObjectMixin` （通用列表）整合在一起是极好的, 但是若想把 ``SingleObjectMixin`` （通用详情）和 ``MultipleObjectMixin`` （通用列表）整合在一起就麻烦了。
+
+为了展示当您尝试更复杂时会发生什么，我们展示了一个示例，当有一个更简单的解决方案时牺牲可读性和可维护性。首先，我们来看一下如何把 :class:`~django.views.generic.detail.DetailView` 和 :class:`~django.views.generic.edit.FormMixin` 结合起来，实现 ``POST`` 一个 Django :class:`~django.forms.Form` 到相同 URL，这样我们就可以用 :class:`DetailView` 来显示具体对象了。
+
+将 ``FormMixin`` 用于 ``DetailView``
+---------------------------------------
+
+想想我们之前合用 :class:`View` 和 :class:`~django.views.generic.detail.SingleObjectMixin` 的例子。我们想要记录用户对哪些作者感兴趣；也就是说我们想让用户发表说为什么喜欢这些作者的信息。同样的，我们假设这些数据并没有存放在关系数据库里，而是存在另外一个奥妙之地（其实这里不用关心具体存放到了哪里）。
+
+要实现这一点，自然而然就要设计一个 :class:`~django.forms.Form`，让用户把相关信息通过浏览器发送到 Django 后台。 另外，我们要巧用 `REST`_ 方法，这样我们就可以用相同的 URL 来显示作者和捕捉来自用户的消息了。让我们重写 ``AuthorDetailView`` 来实现它。
+
+.. _REST: https://en.wikipedia.org/wiki/Representational_state_transfer
+
+我们将保持 :class:`DetailView` 的 ``GET`` 处理，然而我们需要在上下文数据中添加一个 :class:`~django.forms.Form`，以便我们可以在模板上渲染它。我们还想从 :class:`~django.views.generic.edit.FormMixin` 中提取表单处理，并写一些代码，以便在 ``POST`` 上适当地调用表单。
+
+.. note::
+
+    我们使用 :class:`~django.views.generic.edit.FormMixin` 并实现 ``post()``，而不是尝试将 :class:`DetailView` 与 :class:`FormView` 结合（它已经提供了 ``post()``），因为这两个视图都实现了``get()``，事情会变得更加混乱。
+
+我们的新 ``AuthorDetail`` 看起来像这样::
+
+    # CAUTION: you almost certainly do not want to do this.
+    # It is provided as part of a discussion of problems you can
+    # run into when combining different generic class-based view
+    # functionality that is not designed to be used together.
+
+    from django import forms
+    from django.http import HttpResponseForbidden
+    from django.urls import reverse
+    from django.views.generic import DetailView
+    from django.views.generic.edit import FormMixin
+    from books.models import Author
+
+    class AuthorInterestForm(forms.Form):
+        message = forms.CharField()
+
+    class AuthorDetail(FormMixin, DetailView):
+        model = Author
+        form_class = AuthorInterestForm
+
+        def get_success_url(self):
+            return reverse('author-detail', kwargs={'pk': self.object.pk})
+
+        def get_context_data(self, **kwargs):
+            context = super(AuthorDetail, self).get_context_data(**kwargs)
+            context['form'] = self.get_form()
+            return context
+
+        def post(self, request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return HttpResponseForbidden()
+            self.object = self.get_object()
+            form = self.get_form()
+            if form.is_valid():
+                return self.form_valid(form)
+            else:
+                return self.form_invalid(form)
+
+        def form_valid(self, form):
+            # Here, we would record the user's interest using the message
+            # passed in form.cleaned_data['message']
+            return super(AuthorDetail, self).form_valid(form)
+
+``get_success_url()`` 只是提供重定向的地方，它在 ``form_valid()`` 的默认实现中使用。如上所述，我们必须提供我们自己的 ``post()``，并覆盖 ``get_context_data()``，以使 :class:`~django.forms.Form` 在上下文数据中可用。
+
+优化方案
+-----------------
+
+很明显，:class:`~django.views.generic.edit.FormMixin` 和 :class:`DetailView` 之间的微妙交互的数量已经在测试我们管理事物的能力。你不太可能会去想自己写这种类的。
+
+在这种情况下，只需自己写 ``post()`` 方法，保持 :class:`DetailView` 作为唯一的通用功能，虽然写 :class:`~django.forms.Form` 处理代码涉及很多重复。
+
+或者，仍然比上述方法更容易具有用于处理表单的单独视图，这可以使用 :class:`~django.views.generic.edit.FormView` 与 :class:`DetailView` 不同的地方。
+
+其他可选的方案
+------------------------------
+
+我们真正想在这里做的是使用来自同一个 URL 的两个不同的基于类的视图。那么为什么不这样做呢？我们在这里有一个非常清楚的划分：``GET`` 请求应该获得 :class:`DetailView` （将 :class:`~django.forms.Form` 添加到上下文数据），``POST`` 请求应该获得 :class:`FormView`。让我们先设置这些视图。
+
+``AuthorDisplay`` 视图几乎与 :ref:`我们第一次引入 AuthorDetail 时<generic-views-extra-work>` 相同；我们必须写入我们自己的 ``get_context_data()``，使 ``AuthorInterestForm`` 可用于模板。为了清楚起见，我们将跳过之前的 ``get_object()`` 覆盖::
+
+    from django.views.generic import DetailView
+    from django import forms
+    from books.models import Author
+
+    class AuthorInterestForm(forms.Form):
+        message = forms.CharField()
+
+    class AuthorDisplay(DetailView):
+        model = Author
+
+        def get_context_data(self, **kwargs):
+            context = super(AuthorDisplay, self).get_context_data(**kwargs)
+            context['form'] = AuthorInterestForm()
+            return context
+
+``AuthorInterest`` 是一个简单的 :class:`FormView`，但是我们不得不把 :class:`~django.views.generic.detail.SingleObjectMixin` 引入进来，这样我们才能定位我们评论的作者，并且我们还要记得设置 ``template_name`` 来确保表单出错时使用 ``GET`` 会渲染到 ``AuthorDisplay`` 相同的模板::
+
+    from django.urls import reverse
+    from django.http import HttpResponseForbidden
+    from django.views.generic import FormView
+    from django.views.generic.detail import SingleObjectMixin
+
+    class AuthorInterest(SingleObjectMixin, FormView):
+        template_name = 'books/author_detail.html'
+        form_class = AuthorInterestForm
+        model = Author
+
+        def post(self, request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return HttpResponseForbidden()
+            self.object = self.get_object()
+            return super(AuthorInterest, self).post(request, *args, **kwargs)
+
+        def get_success_url(self):
+            return reverse('author-detail', kwargs={'pk': self.object.pk})
+
+最后，我们将这个在一个新的 ``AuthorDetail`` 视图中。我们已经知道，在基于类的视图上调用 :meth:`~django.views.generic.base.View.as_view()` 会让我们看起来像一个基于函数的视图，所以我们可以在两个子视图之间选择。
+
+您当然可以以与在 URLconf 中相同的方式将关键字参数传递给 :meth:`~django.views.generic.base.View.as_view()`，例如，如果您希望 ``AuthorInterest`` 行为也出现在另一个网址但使用不同的模板::
+
+    from django.views import View
+
+    class AuthorDetail(View):
+
+        def get(self, request, *args, **kwargs):
+            view = AuthorDisplay.as_view()
+            return view(request, *args, **kwargs)
+
+        def post(self, request, *args, **kwargs):
+            view = AuthorInterest.as_view()
+            return view(request, *args, **kwargs)
+
+此方法也可以与任何其他基于类的视图或您自己的基于类的视图直接从 :class:`View` 或 :class:`TemplateView` 继承，因为它独尽可能的保持不同的视图单。
+
+.. _jsonresponsemixin-example:
+
+返回 HTML 以外的内容
+=======================
+
+基于类的视图在同一件事需要实现多次的时候非常有优势。假设你正在编写 API，每个视图应该返回 JSON 而不是渲染后的 HTML。
+
+我们可以创建一个 Mixin 类来处理 JSON 的转换，并将它用于所有的视图。
+
+例如，一个简单的 JSON Mixin 可能像这样::
+
+    from django.http import JsonResponse
+
+    class JSONResponseMixin(object):
+        """
+        A mixin that can be used to render a JSON response.
+        """
+        def render_to_json_response(self, context, **response_kwargs):
+            """
+            Returns a JSON response, transforming 'context' to make the payload.
+            """
+            return JsonResponse(
+                self.get_data(context),
+                **response_kwargs
+            )
+
+        def get_data(self, context):
+            """
+            Returns an object that will be serialized as JSON by json.dumps().
+            """
+            # Note: This is *EXTREMELY* naive; in reality, you'll need
+            # to do much more complex handling to ensure that arbitrary
+            # objects -- such as Django model instances or querysets
+            # -- can be serialized as JSON.
+            return context
+
+.. note::
+
+    查看 :doc:`/topics/serialization` 的文档，其中有如何正确转换 Django 模型和查询集到 JSON 的更多信息。
+
+该 Mixin 提供一个 ``render_to_json_response()`` 方法，它与 :func:`~django.views.generic.base.TemplateResponseMixin.render_to_response()` 的参数相同。要使用它，我们只需要将它与 ``TemplateView`` 组合，并覆盖 ``render_to_response()`` 来调用 ``render_to_json_response()``::
+
+    from django.views.generic import TemplateView
+
+    class JSONView(JSONResponseMixin, TemplateView):
+        def render_to_response(self, context, **response_kwargs):
+            return self.render_to_json_response(context, **response_kwargs)
+
+同样地，我们可以将我们的 Mixin 与某个通用的视图一起使用。我们可以实现自己的 :class:`~django.views.generic.detail.DetailView` 版本，将 ``JSONResponseMixin`` 和 ``django.views.generic.detail.BaseDetailView`` 组合 —— （
+:class:`~django.views.generic.detail.DetailView` 将在模板渲染行为发生前组合进去）::
+
+    from django.views.generic.detail import BaseDetailView
+
+    class JSONDetailView(JSONResponseMixin, BaseDetailView):
+        def render_to_response(self, context, **response_kwargs):
+            return self.render_to_json_response(context, **response_kwargs)
+
+这个视图可以和其它 :class:`~django.views.generic.detail.DetailView` 一样使用，它们的行为完全相同 —— 除了响应的格式之外。
+
+如果你想更进一步，你可以组合 :class:`~django.views.generic.detail.DetailView` 的子类，它根据 HTTP 请求的某个属性既能够返回 HTML 又能够返回 JSON 内容，例如查询参数或 HTTP 头部。这只需将 ``JSONResponseMixin`` 和 :class:`~django.views.generic.detail.SingleObjectTemplateResponseMixin` 组合，并覆盖 :func:`~django.views.generic.base.TemplateResponseMixin.render_to_response()` 的实现以根据用户请求的响应类型进行正确的渲染::
+
+    from django.views.generic.detail import SingleObjectTemplateResponseMixin
+
+    class HybridDetailView(JSONResponseMixin, SingleObjectTemplateResponseMixin, BaseDetailView):
+        def render_to_response(self, context):
+            # Look for a 'format=json' GET argument
+            if self.request.GET.get('format') == 'json':
+                return self.render_to_json_response(context)
+            else:
+                return super(HybridDetailView, self).render_to_response(context)
+
+由于 Python 解析方法重载的方式，``super(HybridDetailView, self).render_to_response(context)`` 调用将以调用 :class:`~django.views.generic.base.TemplateResponseMixin` 的 :meth:`~django.views.generic.base.TemplateResponseMixin.render_to_response()` 实现结束。

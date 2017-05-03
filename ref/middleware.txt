@@ -1,0 +1,371 @@
+==========
+中间件
+==========
+
+.. module:: django.middleware
+   :synopsis: Django 内建的中间件类。
+
+这篇文档介绍了 Django 自带的所有中间件组件。要查看关于如何使用它们以及如何编写自己的中间件，请见 :doc:`中间件使用指导 </topics/http/middleware>`。
+
+可用的中间件
+====================
+
+缓存中间件
+----------------
+
+.. module:: django.middleware.cache
+   :synopsis: 全站范围的缓存中间件。
+
+.. class:: UpdateCacheMiddleware
+
+.. class:: FetchFromCacheMiddleware
+
+开启全站范围的缓存。如果开启了这些缓存，任何一个由 Django 提供的页面将会被缓存，缓存时长是由你在 :setting:`CACHE_MIDDLEWARE_SECONDS` 配置中定义的。详见 :doc:`缓存文档 </topics/cache>`。
+
+“通用”的中间件
+-------------------
+
+.. module:: django.middleware.common
+   :synopsis: 给完美主义者增加常用便利条件的中间件。
+
+.. class:: CommonMiddleware
+
+给完美主义者增加一些便利条件：
+
+* 禁止访问 :`DISALLOWED_USER_AGENTS` 中设置的用户代理，这项配置应该是一个已编译的正则表达式对象的列表。
+
+* 基于 :setting:`APPEND_SLASH` 和 :setting:`PREPEND_WWW` 的设置来重写 URL。
+
+  如果 :setting:`APPEND_SLASH` 设为 ``True``，并且初始 URL 没有以斜线结尾以及在 URLconf 中没找到对应定义，这时形成一个斜线结尾的新 URL。如果这个新的 URL 存在于 URLconf，那么 Django 重定向请求到这个新 URL 上。否则，按正常情况处理初始的 URL。
+
+  比如，如果你没有为 ``foo.com/bar`` 定义有效的正则，但是为 ``foo.com/bar/`` 定义了有效的正则，``foo.com/bar`` 将会被重定向到 ``foo.com/bar/``。
+
+  如果 :setting:`PREPEND_WWW` 设为 ``True``，前面缺少“www.”的 URL 将会被重定向到相同但是以一个“www.”开头的 URL。
+
+  两种选项都是为了规范化 URL。其中的哲学就是，任何一个 URL 应该在一个地方仅存在一个。技术上来讲，URL ``foo.com/bar`` 区别于 ``foo.com/bar/`` —— 搜索引擎索引会把这里分开处理 —— 因此最佳实践就是规范化 URL。
+
+* 基于 :setting:`USE_ETAGS` 设置来处理 ETag。如果设置 :setting:`USE_ETAGS` 为 ``True``，Django 会通过 MD5 哈希处理页面的内容来为每一个页面请求计算Etag，并且如果合适的话，它将会发送携带 ``Not Modified`` 的响应。
+
+.. attribute:: CommonMiddleware.response_redirect_class
+
+默认为 :class:`~django.http.HttpResponsePermanentRedirect`。它继承了 ``CommonMiddleware``，并覆写了属性来自定义中间件发出的重定向。
+
+.. class:: BrokenLinkEmailsMiddleware
+
+* 向 :setting:`MANAGERS` 发送死链提醒邮件（详见 :doc:`/howto/error-reporting`）。
+
+异常中间件
+--------------------
+
+.. module:: django.middleware.exception
+   :synopsis: 返回异常响应的中间件。
+
+.. class:: ExceptionMiddleware
+
+.. versionadded:: 1.10
+
+捕获在请求/响应周期中抛出的异常并返回对应的响应。
+
+* :class:`~django.http.Http404` 由 :data:`~django.conf.urls.handler404` （或更友好的调试页面，如果 :setting:`DEBUG=True <DEBUG>` ）处理。
+* :class:`~django.core.exceptions.PermissionDenied` 由 :data:`~django.conf.urls.handler403` 处理。
+* ``MultiPartParserError`` 由 :data:`~django.conf.urls.handler400` 处理。
+* :class:`~django.core.exceptions.SuspiciousOperation` 由 :data:`~django.conf.urls.handler400` （或更友好的调试页面，如果 :setting:`DEBUG=True <DEBUG>` ）处理。
+* 任何其他异常由 :data:`~django.conf.urls.handler500` （或更友好的调试页面，如果 :setting:`DEBUG=True <DEBUG>` ）处理。
+
+Django 不管你是否将这个中间件包含在 :setting:`MIDDLEWARE` 中都会使用它，但是，如果你自己的中间件需要将这些异常转换为适当的响应，你可能想要子类化。:class:`~django.middleware.locale.LocaleMiddleware` 就是这样做的。
+
+GZip 中间件
+---------------
+
+.. module:: django.middleware.gzip
+   :synopsis: Middleware to serve GZipped content for performance.
+
+.. class:: GZipMiddleware
+
+.. warning::
+
+    安全研究员最近发现，当压缩技术（包括 ``GZipMiddleware``）用于一个网站的时候，网站会受到一些可能的攻击。此外，这些方法可以用于破坏 Django 的 CSRF 保护。在你的站点使用 ``GZipMiddleware`` 之前，你应该先仔细考虑一下你的站点是否容易受到这些攻击。如果你不确定是否会受到这些影响，应该避免使用 ``GZipMiddleware``。详见 `the BREACH paper (PDF)`_ 和 `breachattack.com`_.
+
+    .. _the BREACH paper (PDF): http://breachattack.com/resources/BREACH%20-%20SSL,%20gone%20in%2030%20seconds.pdf
+    .. _breachattack.com: http://breachattack.com
+
+为支持 GZip 压缩的浏览器（所有现代的浏览器）压缩内容。
+
+建议把这个中间件放到中间件配置列表的第一个，这样压缩响应内容的处理会到最后才发生。
+
+如果满足下面条件的话，内容不会被压缩：
+
+* 消息体的长度小于 200 个字节。
+
+* 响应已经设置了 ``Content-Encoding`` 协议头。
+
+* 请求（浏览器）没有发送包含 ``gzip`` 的 ``Accept-Encoding`` 协议头。
+
+你可以通过这个 :func:`~django.views.decorators.gzip.gzip_page()` 装饰器使用独立的 GZip 压缩。
+
+.. versionchanged:: 1.10
+
+    在旧版本中，Django 的 CSRF 保护机制在使用压缩时容易受到 BREACH 攻击。现在不再是这样，但你仍然应该小心不要以这种方式危害你自己的秘密。
+
+带条件判断的 GET 中间件
+--------------------------
+
+.. module:: django.middleware.http
+   :synopsis: 处理高级 HTTP 功能的中间件。
+
+.. class:: ConditionalGetMiddleware
+
+处理带有条件判断状态 GET 操作。 如果一个请求包含 ``ETag`` 或者 ``Last-Modified`` 协议头，并且请求包含 ``If-None-Match`` 或 ``If-Modified-Since``，这时响应会被替换为 :class:`~django.http.HttpResponseNotModified`。
+
+另外，它会设置 ``Date`` 和 ``Content-Length`` 响应头。
+
+地域性中间件
+-----------------
+
+.. module:: django.middleware.locale
+   :synopsis: 开启基于请求的语言选择的中间件。
+
+.. class:: LocaleMiddleware
+
+基于请求中的数据开启语言选择。它可以为每个用户进行定制。详见 :doc:`国际化文档 </topics/i18n/translation>`。
+
+.. attribute:: LocaleMiddleware.response_redirect_class
+
+默认为 :class:`~django.http.HttpResponseRedirect`。继承自 ``LocaleMiddleware`` 并覆写了属性来自定义中间件发出的重定向。
+
+消息中间件
+------------------
+
+.. module:: django.contrib.messages.middleware
+   :synopsis: 消息中间件。
+
+.. class:: MessageMiddleware
+
+开启基于 Cookie 和会话的消息支持。详见 :doc:`消息文档 </ref/contrib/messages>`。
+
+.. _security-middleware:
+
+安全中间件
+-------------------
+
+.. module:: django.middleware.security
+    :synopsis: 安全中间件。
+
+.. warning::
+    如果你的部署环境允许的话，让你的前端 Web 服务器展示 ``SecurityMiddleware`` 提供的功能是个好主意。这样一来，如果有任何请求没有被 Django 处理（比如静态媒体或用户上传的文件），它们会拥有和向 Django 应用的请求相同的保护。
+
+.. class:: SecurityMiddleware
+
+The ``django.middleware.security.SecurityMiddleware`` 为请求/响应循环提供了几种安全改进。每一种可以通过一个选项独立开启或关闭。
+
+* :setting:`SECURE_BROWSER_XSS_FILTER`
+* :setting:`SECURE_CONTENT_TYPE_NOSNIFF`
+* :setting:`SECURE_HSTS_INCLUDE_SUBDOMAINS`
+* :setting:`SECURE_HSTS_SECONDS`
+* :setting:`SECURE_REDIRECT_EXEMPT`
+* :setting:`SECURE_SSL_HOST`
+* :setting:`SECURE_SSL_REDIRECT`
+
+.. _http-strict-transport-security:
+
+HTTP Strict Transport Security
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+对于那些应该只能通过 HTTPS 访问的站点，你可以通过设置 `"Strict-Transport-Security" 协议头`_，通知现代的浏览器，拒绝用不安全的连接来连接你的域名。这会降低你受到 SSL-stripping 的中间人（MITM）攻击的风险。
+
+如果你将 :setting:`SECURE_HSTS_SECONDS` 设置为一个非零值，``SecurityMiddleware`` 会在所有的 HTTPS 响应中设置这个协议头。
+
+开启 HSTS 的时候，首先使用一个小的值来测试它是个好主意，例如，让 :setting:`SECURE_HSTS_SECONDS = 3600<SECURE_HSTS_SECONDS>` 为一个小时。每当浏览器在你的站点看到 HSTS 协议头，都会在提供的时间段内拒绝使用不安全（使用 HTTP）的方式连接到你的域名。一旦你确认你站点上的所有东西都以安全的方式提供（例如，HSTS 并不会干扰任何事情），建议你增加这个值，这样不常访问你站点的游客也会被保护（比如，一般设置为 31536000 秒，一年）。
+
+另外，如果你将 :setting:`SECURE_HSTS_INCLUDE_SUBDOMAINS` 设置为 ``True``，``SecurityMiddleware`` 会将 ``includeSubDomains`` 标签添加到 ``Strict-Transport-Security`` 协议头中。强烈推荐这样做（假设所有子域完全使用 HTTPS），否则你的站点仍旧有可能由于子域的不安全连接而受到攻击。
+
+.. warning::
+    HSTS 策略在你的整个域中都被应用，不仅仅是你所设置协议头的响应中的 URL。所以，如果你的整个域都设置为 HTTPS only，你应该只使用 HSTS 策略。
+
+    适当遵循 HSTS 协议头的浏览器，会通过显示警告的方式，拒绝让用户连接到证书过期的、自行签署的、或者其他 SSL 证书无效的站点。如果你使用了 HSTS，确保你的证书处于一直有效的状态！
+
+.. note::
+    如果你的站点部署在负载均衡器或者反向代理之后，并且 ``Strict-Transport-Security`` 协议头没有添加到你的响应中，原因是 Django 有可能意识不到这是一个安全连接。你可能需要设置 :setting:`SECURE_PROXY_SSL_HEADER`。
+
+.. _"Strict-Transport-Security" 协议头: https://en.wikipedia.org/wiki/Strict_Transport_Security
+
+.. _x-content-type-options:
+
+``X-Content-Type-Options: nosniff``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+一些浏览器会尝试猜测他们所得内容的类型，而不是读取 ``Content-Type`` 协议头。虽然这样有助于配置不当的服务器正常显示内容，但也会导致安全问题。
+
+如果你的站点允许用户上传文件，一些恶意的用户可能会上传一个精心构造的文件，当你觉得它无害的时候，文件会被浏览器解释成 HTML 或者 JavaScript。
+
+欲知更多有关这个协议头和浏览器如何处理它的内容，你可以在 `IE 安全博客`_ 中读到它。
+
+要防止浏览器猜测内容类型，并且强制它一直使用 ``Content-Type`` 协议头中提供的类型，你可以传递 ``X-Content-Type-Options: nosniff`` 协议头。如果 :setting:`SECURE_CONTENT_TYPE_NOSNIFF` 设置为 ``True``，``SecurityMiddleware`` 将会对所有响应这样做。
+
+注意在大多数 Django 不涉及处理上传文件的部署环境中，这个设置不会有任何帮助。例如，如果你的 :setting:`MEDIA_URL` 被前端 Web 服务器直接处理（例如 nginx 和 Apache），你可能想要在那里设置这个协议头。而在另一方面，如果你使用 Django 执行为了下载文件而请求授权之类的事情，并且你不能使用你的 Web 服务器设置协议头，这个设置会很有用。
+
+.. _IE 安全博客: http://blogs.msdn.com/b/ie/archive/2008/09/02/ie8-security-part-vi-beta-2-update.aspx
+
+.. _x-xss-protection:
+
+``X-XSS-Protection: 1; mode=block``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+一些浏览器能够屏蔽掉出现 `XSS 攻击`_ 的内容。通过寻找页面中 GET 或者 POST 参数中的 JavaScript 内容来实现。如果 JavaScript 在服务器的响应中被重放，页面就会停止渲染，并展示一个错误页来取代。
+
+`X-XSS-Protection 协议头`_ 用来控制 XSS 过滤器的操作。
+
+要在浏览器中启用 XSS 过滤器，并且强制它一直屏蔽可疑的 XSS 攻击，你可以在协议头中传递 ``X-XSS-Protection: 1; mode=block``。如果 :setting:`SECURE_BROWSER_XSS_FILTER` 设置为 ``True``，``SecurityMiddleware`` 会在所有响应中这样做。
+
+.. warning::
+    浏览器的 XSS 过滤器是一个十分有效的手段，但是不要过度依赖它。它并不能检测到所有的 XSS 攻击，也不是所有浏览器都支持这一协议头。确保你 :ref:`校验和过滤 <cross-site-scripting>` 了所有的输入来防止 XSS 攻击。
+
+.. _XSS 攻击: https://en.wikipedia.org/wiki/Cross-site_scripting
+.. _X-XSS-Protection 协议头: http://blogs.msdn.com/b/ie/archive/2008/07/02/ie8-security-part-iv-the-xss-filter.aspx
+
+.. _ssl-redirect:
+
+SSL 重定向
+~~~~~~~~~~~~
+
+如果你同时提供 HTTP 和 HTTPS 连接，大多数用户会默认使用不安全的链接。为了更高的安全性，你应该重定向所有的 HTTP 连接到 HTTPS。
+
+如果你将 :setting:`SECURE_SSL_REDIRECT` 设置为 ``True``，``SecurityMiddleware`` 会将 HTTP 链接永久地（HTTP 301，permanently）重定向到 HTTPS 连接。
+
+.. note::
+
+    由于性能因素，最好在 Django 外面执行这些重定向，在 `nginx`_ 这种前端负载均衡器或者反向代理服务器中执行。:setting:`SECURE_SSL_REDIRECT` 专门为这种部署情况不可选的时候设计。
+
+如果 :setting:`SECURE_SSL_HOST` 设置有一个值，所有重定向都会发到值中的主机，而不是原始的请求主机。
+
+如果你站点上的一些页面应该以 HTTP 方式提供，并且不需要重定向到 HTTPS，你可以 :setting:`SECURE_REDIRECT_EXEMPT` 设置中列出匹配那些 URL 的正则表达式。
+
+.. note::
+    如果你在负载均衡器或者反向代理服务器后面部署应用，而且 Django 不能辨别出什么时候一个请求是安全的，你可能需要设置 :setting:`SECURE_PROXY_SSL_HEADER`。
+
+.. _nginx: http://nginx.org
+
+会话中间件
+------------------
+
+.. module:: django.contrib.sessions.middleware
+   :synopsis: 会话中间件。
+
+.. class:: SessionMiddleware
+
+开启会话支持。详见 :doc:`会话文档 </topics/http/sessions>`。
+
+站点中间件
+---------------
+
+.. module:: django.contrib.sites.middleware
+  :synopsis: 站点中间件。
+
+.. class:: CurrentSiteMiddleware
+
+向每个接收到的 ``HttpRequest`` 对象添加一个 ``site`` 属性，表示当前的站点。详见 :ref:`站点文档 <site-middleware>`。
+
+身份验证中间件
+-------------------------
+
+.. module:: django.contrib.auth.middleware
+  :synopsis: 身份验证中间件。
+
+.. class:: AuthenticationMiddleware
+
+向每个接收到的 ``HttpRequest`` 对象添加 ``user`` 属性，表示当前登录的用户。详见 :ref:`Web 请求中的身份验证 <auth-web-requests>`。
+
+.. class:: RemoteUserMiddleware
+
+使用 Web 服务器提供身份验证的中间件。详见 :doc:`/howto/auth-remote-user`。
+
+.. class:: PersistentRemoteUserMiddleware
+
+.. versionadded:: 1.9
+
+用于仅在登录页面上启用 Web 服务器提供的身份验证的中间件。详见 :ref:`persistent-remote-user-middleware-howto`。
+
+CSRF 保护中间件
+--------------------------
+
+.. module:: django.middleware.csrf
+   :synopsis: 添加对跨站点请求伪造的保护的中间件。
+
+.. class:: CsrfViewMiddleware
+
+添加跨站点请求伪造的保护，通过向POST表单添加一个隐藏的表单字段，并检查请求中是否有正确的值。详见 :doc:`CSRF保护文档 </ref/csrf>`。
+
+``X-Frame-Options`` 中间件
+------------------------------
+
+.. module:: django.middleware.clickjacking
+   :synopsis: 点击劫持保护。
+
+.. class:: XFrameOptionsMiddleware
+
+通过 X-Frame-Options 协议头进行简单的 :doc:`点击劫持保护 </ref/clickjacking/>`。
+
+.. _middleware-ordering:
+
+中间件的排序
+===================
+
+下面是一些关于 Django 中间件排序的提示：
+
+#. :class:`~django.middleware.security.SecurityMiddleware`
+
+   如果你要打开 SSL 重定向，为了避免运行一堆其他不必要的中间件，它应该放在靠近列表顶部的位置。
+
+#. :class:`~django.middleware.cache.UpdateCacheMiddleware`
+
+   放在修改 ``大量`` 协议头的中间件（``SessionMiddleware``，``GZipMiddleware``，``LocaleMiddleware``）之前。
+
+#. :class:`~django.middleware.gzip.GZipMiddleware`
+
+   放在任何可能修改或使用响应消息体的中间件之前。
+
+   放在 ``UpdateCacheMiddleware`` 之后：会修改 ``大量`` 的协议头。
+
+#. :class:`~django.middleware.http.ConditionalGetMiddleware`
+
+   放在 ``CommonMiddleware`` 之前：当 :setting:`USE_ETAGS` = ``True`` 时会使用它的 ``ETag`` 协议头。
+
+#. :class:`~django.contrib.sessions.middleware.SessionMiddleware`
+
+   放在 ``UpdateCacheMiddleware`` 之后：会修改 ``大量`` 协议头。
+
+#. :class:`~django.middleware.locale.LocaleMiddleware`
+
+   放在 ``SessionMiddleware`` （由于使用会话数据）和 ``UpdateCacheMiddleware`` （由于要修改 ``大量`` 协议头）之后的最上面。
+
+#. :class:`~django.middleware.common.CommonMiddleware`
+
+   放在任何可能修改相应的中间件之前（因为它会生成 ``ETags``）。
+
+   在 ``GZipMiddleware`` 之后，不会在压缩后的内容上再去生成 ``ETag``。
+
+   尽可能放在靠上面的位置，因为 :setting:`APPEND_SLASH` 或者 :setting:`PREPEND_WWW` 设置为 ``True`` 时会被重定向。
+
+#. :class:`~django.middleware.csrf.CsrfViewMiddleware`
+
+   放在任何假设 CSRF 攻击被处理的视图中间件之前。
+
+#. :class:`~django.contrib.auth.middleware.AuthenticationMiddleware`
+
+   放在 ``SessionMiddleware`` 之后：因为它使用会话存储。
+
+#. :class:`~django.contrib.messages.middleware.MessageMiddleware`
+
+   放在 ``SessionMiddleware`` 之后：会使用基于会话的存储。
+
+#. :class:`~django.middleware.cache.FetchFromCacheMiddleware`
+
+   放在任何修改 ``大量`` 协议头的中间件之后：协议头被用来从缓存的哈希表中获取值。
+
+#. :class:`~django.contrib.flatpages.middleware.FlatpageFallbackMiddleware`
+
+   应该放在最底下，因为它是中间件中的最后措施。
+
+#. :class:`~django.contrib.redirects.middleware.RedirectFallbackMiddleware`
+
+   应该放在最底下，因为它是中间件中的最后措施。

@@ -1,0 +1,219 @@
+=====================
+通用的编辑视图
+=====================
+
+本页中描述的以下视图提供内容编辑的基础功能：
+
+* :class:`django.views.generic.edit.FormView`
+* :class:`django.views.generic.edit.CreateView`
+* :class:`django.views.generic.edit.UpdateView`
+* :class:`django.views.generic.edit.DeleteView`
+
+.. note::
+
+    本页中的一些示例假定 ``Author`` 模型已经在 ``myapp/models.py`` 中定义如下::
+
+        from django.urls import reverse
+        from django.db import models
+
+        class Author(models.Model):
+            name = models.CharField(max_length=200)
+
+            def get_absolute_url(self):
+                return reverse('author-detail', kwargs={'pk': self.pk})
+
+``FormView``
+============
+
+.. class:: django.views.generic.edit.FormView
+
+    显示表单的视图。发送错误时，重新显示表单和验证的错误；成功时，重定向到一个新的 URL。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * ``django.views.generic.edit.BaseFormView``
+    * :class:`django.views.generic.edit.FormMixin`
+    * :class:`django.views.generic.edit.ProcessFormView`
+    * :class:`django.views.generic.base.View`
+
+    **示例 myapp/forms.py**::
+
+        from django import forms
+
+        class ContactForm(forms.Form):
+            name = forms.CharField()
+            message = forms.CharField(widget=forms.Textarea)
+
+            def send_email(self):
+                # send email using the self.cleaned_data dictionary
+                pass
+
+    **示例 myapp/views.py**::
+
+        from myapp.forms import ContactForm
+        from django.views.generic.edit import FormView
+
+        class ContactView(FormView):
+            template_name = 'contact.html'
+            form_class = ContactForm
+            success_url = '/thanks/'
+
+            def form_valid(self, form):
+                # This method is called when valid form data has been POSTed.
+                # It should return an HttpResponse.
+                form.send_email()
+                return super(ContactView, self).form_valid(form)
+
+    **示例 myapp/contact.html**:
+
+    .. code-block:: html+django
+
+        <form action="" method="post">{% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Send message" />
+        </form>
+
+
+``CreateView``
+==============
+
+.. class:: django.views.generic.edit.CreateView
+
+    一个视图，它显示一个表单用于创建对象，出现错误时会重新显示表单，否则保存该对象。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.detail.SingleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * ``django.views.generic.edit.BaseCreateView``
+    * :class:`django.views.generic.edit.ModelFormMixin`
+    * :class:`django.views.generic.edit.FormMixin`
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+    * :class:`django.views.generic.edit.ProcessFormView`
+    * :class:`django.views.generic.base.View`
+
+    **属性**
+
+    .. attribute:: template_name_suffix
+
+        显示给 ``GET`` 请求的 ``CreateView`` 页使用的 ``'_form'`` 的 ``template_name_suffix``。例如，对于为示例 ``Author`` 模型创建对象的视图，将此属性更改为 ``'_create_form'`` 会导致默认的 ``template_name`` 变成 ``'myapp/author_create_form.html'``。
+
+    .. attribute:: object
+
+        使用 ``CreateView`` 时，您可以访问 ``self.object``，这是正在被创建的对象。如果对象尚未创建，则值将为 ``None``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.edit import CreateView
+        from myapp.models import Author
+
+        class AuthorCreate(CreateView):
+            model = Author
+            fields = ['name']
+
+    **示例 myapp/author_form.html**:
+
+    .. code-block:: html+django
+
+        <form action="" method="post">{% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Save" />
+        </form>
+
+``UpdateView``
+==============
+
+.. class:: django.views.generic.edit.UpdateView
+
+    显示用于编辑现有对象的窗体的视图，重新显示具有验证错误的窗体（如果有）并保存对象的更改。这使用从对象的模型类自动生成的表单（除非手动指定表单类）。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.detail.SingleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * ``django.views.generic.edit.BaseUpdateView``
+    * :class:`django.views.generic.edit.ModelFormMixin`
+    * :class:`django.views.generic.edit.FormMixin`
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+    * :class:`django.views.generic.edit.ProcessFormView`
+    * :class:`django.views.generic.base.View`
+
+    **属性**
+
+    .. attribute:: template_name_suffix
+
+        显示给 ``GET`` 请求的 ``UpdateView`` 页使用的 ``'_form'`` 的 ``template_name_suffix``。例如，对于示例 ``Author`` 模型更新对象的视图，将此属性更改为 ``'_update_form'`` 会导致默认的 ``template_name`` 变成 ``'myapp/author_update_form.html'``。
+
+    .. attribute:: object
+
+        使用 ``UpdateView`` 时，您可以访问 ``self.object``，这是要更新的对象。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.edit import UpdateView
+        from myapp.models import Author
+
+        class AuthorUpdate(UpdateView):
+            model = Author
+            fields = ['name']
+            template_name_suffix = '_update_form'
+
+    **示例 myapp/author_update_form.html**:
+
+    .. code-block:: html+django
+
+        <form action="" method="post">{% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Update" />
+        </form>
+
+``DeleteView``
+==============
+
+.. class:: django.views.generic.edit.DeleteView
+
+    显示确认页面并删除现有对象的视图。仅当请求方法为 ``POST`` 时，才会删除给定的对象。如果此视图是通过 ``GET`` 提取的，它将显示一个确认页面，其中应包含 POST 到同一个网址的表单。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.detail.SingleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * ``django.views.generic.edit.BaseDeleteView``
+    * :class:`django.views.generic.edit.DeletionMixin`
+    * ``django.views.generic.detail.BaseDetailView``
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+    * :class:`django.views.generic.base.View`
+
+    **属性**
+
+    .. attribute:: template_name_suffix
+
+        显示给 ``GET`` 请求的 ``DeleteView`` 页使用的 ``'_confirm_delete'`` 的 ``template_name_suffix``。例如，对于示例 ``Author`` 模型的删除对象的视图，将此属性更改为 ``'_check_delete'`` 会导致默认的 ``template_name`` 变成 ``'myapp/author_check_delete.html'``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.edit import DeleteView
+        from django.urls import reverse_lazy
+        from myapp.models import Author
+
+        class AuthorDelete(DeleteView):
+            model = Author
+            success_url = reverse_lazy('author-list')
+
+    **示例 myapp/author_confirm_delete.html**:
+
+    .. code-block:: html+django
+
+        <form action="" method="post">{% csrf_token %}
+            <p>Are you sure you want to delete "{{ object }}"?</p>
+            <input type="submit" value="Confirm" />
+        </form>

@@ -1,0 +1,72 @@
+=================================
+为模型提供初始数据
+=================================
+
+当你首次建立一个应用的时候，为你的数据库预先安装一些硬编码的数据，是很有用处的。你可以通过 fixtures 或者迁移提供初始数据。
+
+.. _initial-data-via-fixtures:
+
+通过 fixtures 提供初始数据
+====================================
+
+fixture 是数据的集合，让 Django 了解如何导入到数据库中。创建 fixture 的最直接的方式，是使用 :djadmin:`manage.py dumpdata <dumpdata>` 命令，如果数据库中已经有了一些数据。或者你可以手写 fixture。fixture 支持 JSON、XML 或者 YAML（需要安装 PyYAML_）文档。:doc:`序列化文档 </topics/serialization>` 中详细阐述了每一种所支持的 :ref:`序列化格式 <serialization-formats>`。
+
+.. _PyYAML: http://www.pyyaml.org/
+
+下面这个例子展示了一个简单的 ``Person`` 模型的 fixture，看起来很像 JSON：
+
+.. code-block:: js
+
+    [
+      {
+        "model": "myapp.person",
+        "pk": 1,
+        "fields": {
+          "first_name": "John",
+          "last_name": "Lennon"
+        }
+      },
+      {
+        "model": "myapp.person",
+        "pk": 2,
+        "fields": {
+          "first_name": "Paul",
+          "last_name": "McCartney"
+        }
+      }
+    ]
+
+下面是它的 YAML 格式：
+
+.. code-block:: none
+
+    - model: myapp.person
+      pk: 1
+      fields:
+        first_name: John
+        last_name: Lennon
+    - model: myapp.person
+      pk: 2
+      fields:
+        first_name: Paul
+        last_name: McCartney
+
+你可以把这些数据储存在你应用的 ``fixtures`` 目录中。
+
+加载数据很简单：只要调用 :djadmin:`manage.py loaddata <loaddata>` 就好了，其中 ``<fixturename>``, where ``<fixturename>`` 是你所创建的 fixture 文件的名字。每次你运行 :djadmin:`loaddata` 的时候，数据都会从 fixture 读出，并且重复加载进数据库。注意这意味着，如果你修改了 fixtrue 创建的某一行，然后再次运行了 :djadmin:`loaddata`，你的修改将会被抹掉。
+
+Django 在哪里寻找 fixture 文件
+--------------------------------
+
+通常，Django 在每个应用的 ``fixtures`` 目录中寻找 fixture 文件。你可以设置 :setting:`FIXTURE_DIRS` 选项为一个额外目录的列表，Django 会从里面寻找。
+
+运行 :djadmin:`manage.py loaddata <loaddata>` 命令的时候，你也可以指定一个 fixture 文件的目录，它会覆盖默认设置中的目录。
+
+.. seealso::
+
+    fixture 也被用于 :ref:`测试框架 <topics-testing-fixtures>` 来搭建一致性的测试环境。
+
+通过迁移提供初始数据
+======================================
+
+如果你想为一个应用自动加载初始数据，不要使用 fixture。而是用 :class:`~django.db.migrations.operations.RunPython` 或者 :class:`~django.db.migrations.operations.RunSQL` 操作为你的应用创建一个迁移。

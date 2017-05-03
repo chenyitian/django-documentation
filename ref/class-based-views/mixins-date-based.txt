@@ -1,0 +1,240 @@
+=================
+基于日期的混合
+=================
+
+.. currentmodule:: django.views.generic.dates
+
+.. note::
+
+    这些 Mixin 中的所有日期格式属性都使用 :func:`~time.strftime` 格式字符。不要尝试使用 :ttag:`now` 模板标记中的格式字符，因为它们不兼容。
+
+``YearMixin``
+=============
+
+.. class:: YearMixin
+
+    可用于检索和提供日期的年份组件的解析信息的 Mixin。
+
+    **方法和属性**
+
+    .. attribute:: year_format
+
+        解析年份时使用的 :func:`~time.strftime` 格式。默认情况下，这是 ``'%Y'``。
+
+    .. attribute:: year
+
+        **可选** 字符串形式的年份值。默认情况下，设置为 ``None``，这意味着年份将使用其他方式确定。
+
+    .. method:: get_year_format()
+
+        返回解析年份时要使用的 :func:`~time.strftime` 格式。默认返回 :attr:`~YearMixin.year_format`。
+
+    .. method:: get_year()
+
+        返回此视图将以字符串形式显示数据的年份。尝试以下来源，按顺序：
+
+        * :attr:`YearMixin.year` 属性的值。
+        * 在 URL 模式中捕获的 ``year`` 参数的值。
+        * ``GET`` 查询参数中的 ``year`` 的值。
+
+        如果找不到有效的年份，则抛出 404。
+
+    .. method:: get_next_year(date)
+
+        返回包含提供日期后一年中第一天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+    .. method:: get_previous_year(date)
+
+        返回包含所提供日期前一年中第一天的日期对象。此函数还可以返回 ``None`` 或抛出 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+``MonthMixin``
+==============
+
+.. class:: MonthMixin
+
+    可用于检索和提供日期的月份组件的解析信息的 Mixin。
+
+    **Methods and Attributes**
+
+    .. attribute:: month_format
+
+        解析月份时使用的 :func:`~time.strftime` 格式。默认情况下，这是 ``'%b'``。
+
+    .. attribute:: month
+
+        **可选** 字符串形式的月份值。默认情况下，设置为 ``None``，这意味着将使用其他方式确定月份。
+
+    .. method:: get_month_format()
+
+        返回解析月份时要使用的 :func:`~time.strftime` 格式。默认返回 :attr:`~MonthMixin.month_format`。
+
+    .. method:: get_month()
+
+        返回此视图将以字符串形式显示数据的月份。尝试以下来源，按顺序：
+
+        * :attr:`MonthMixin.month` 属性的值。
+        * 在 URL 模式中捕获的 ``month`` 参数的值。
+        * ``GET`` 查询参数中的 ``month`` 的值。
+
+        如果找不到有效的月份，则抛出 404。
+
+    .. method:: get_next_month(date)
+
+        返回包含所提供日期下一个月的第一天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+    .. method:: get_previous_month(date)
+
+        返回包含所提供日期前一个月的第一天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+``DayMixin``
+============
+
+.. class:: DayMixin
+
+    可用于检索和提供日期的日期组件的解析信息的 Mixin。
+
+    **方法和属性**
+
+    .. attribute:: day_format
+
+        解析日期时使用的 :func:`~time.strftime` 格式。默认情况下，这是 ``'%d'``。
+
+    .. attribute:: day
+
+        **可选** 字符串形式的日期的值。默认情况下，设置为 ``None``，这意味着将使用其他方式确定日期。
+
+    .. method:: get_day_format()
+
+        返回解析日期时要使用的 :func:`~time.strftime` 格式。默认返回 :attr:`~DayMixin.day_format`。
+
+    .. method:: get_day()
+
+        返回此视图将以字符串形式显示数据的日期。尝试以下来源，按顺序：
+
+        * :attr:`DayMixin.day` 属性的值。
+        * 在 URL 模式中捕获的 ``day`` 参数的值。
+        * ``GET`` 查询参数中的 ``day`` 的值。
+
+        如果没有找到有效的天数，则抛出 404。
+
+    .. method:: get_next_day(date)
+
+        返回包含提供日期后的下一个有效天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+    .. method:: get_previous_day(date)
+
+        返回包含上一个有效日的对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+``WeekMixin``
+=============
+
+.. class:: WeekMixin
+
+    可用于检索和提供日期的周组件的解析信息的 Mixin。
+
+    **方法和属性**
+
+    .. attribute:: week_format
+
+        解析星期时使用的 :func:`~time.strftime` 格式。默认情况下，这是 ``'%U'``，这意味着星期从星期日开始。如果您的星期从星期一开始，请将其设置为 ``'%W'``。
+
+    .. attribute:: week
+
+        **可选** 字符串形式星期的值。默认情况下，设置为 ``None``，这意味着使用其他方式确定星期。
+
+    .. method:: get_week_format()
+
+        返回解析星期时要使用的 :func:`~time.strftime` 格式。默认返回 :attr:`~WeekMixin.week_format`。
+
+    .. method:: get_week()
+
+        返回此视图将以字符串形式显示数据的星期。尝试以下来源，按顺序：
+
+        * :attr:`WeekMixin.week` 属性的值。
+        * 在 URL 模式中捕获的 ``week`` 参数的值。
+        * ``GET`` 查询参数中的 ``week`` 的值。
+
+        如果没有找到有效的星期，则抛出 404。
+
+    .. method:: get_next_week(date)
+
+        返回包含所提供日期后一周中第一天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+    .. method:: get_prev_week(date)
+
+        返回包含提供日期前一周的第一天的日期对象。此函数还可以返回 ``None`` 或抛出一个 :class:`~django.http.Http404` 异常，具体取决于 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 的值。
+
+``DateMixin``
+=============
+
+.. class:: DateMixin
+
+    一个为所有基于日期的视图提供公共行为的 Mixin。
+
+    **方法和属性**
+
+    .. attribute:: date_field
+
+        ``QuerySet`` 的模型中的 ``DateField`` 或 ``DateTimeField`` 的名称，基于日期的归档应该使用它来确定要显示的对象列表在页面上。
+
+        当启用 :doc:`时区支持 </topics/i18n/timezones>` 且 ``date_field`` 为 ``DateTimeField`` 时，假定日期位于当前时区。否则，查询集可以包括来自最终用户的时区中的前一天或次日的对象。
+
+        .. warning::
+
+            在这种情况下，如果您已实施每用户时区选择，则相同的 URL 可能会显示不同的对象集，具体取决于最终用户的时区。为避免这种情况，应使用 ``DateField`` 作为 ``date_field`` 属性。
+
+    .. attribute:: allow_future
+
+        指定是否在此网页上包含“未来”对象的布尔值，其中“未来”表示 ``date_field`` 中指定的字段大于当前日期/时间的对象。默认为 ``False``。
+
+    .. method:: get_date_field()
+
+        返回包含此视图将操作的日期数据的字段的名称。默认返回 :attr:`~DateMixin.date_field`。
+
+    .. method:: get_allow_future()
+
+        确定在此网页上是否包含“未来”对象，其中“未来”表示 ``date_field`` 中指定的字段大于当前日期/时间的对象。默认返回 :attr:`~DateMixin.allow_future`。
+
+``BaseDateListView``
+====================
+
+.. class:: BaseDateListView
+
+    为所有基于日期的视图提供常见行为的基类。通常不会有一个理由实例化 :class:`~django.views.generic.dates.BaseDateListView`；实例化其中一个子类。
+
+    当此视图（及其子类）正在执行时，``self.object_list`` 将包含视图正在操作的对象列表，``self.date_list`` 将包含数据可用的日期。
+
+    **混合**
+
+    * :class:`~django.views.generic.dates.DateMixin`
+    * :class:`~django.views.generic.list.MultipleObjectMixin`
+
+    **方法和属性**
+
+    .. attribute:: allow_empty
+
+        一个指定如果没有对象可用，是否显示页面的布尔值。如果这是 ``True``，且没有可用的对象，该视图将显示一个空页面，而不是抛出 404。
+
+        这与 :attr:`django.views.generic.list.MultipleObjectMixin.allow_empty` 相同，但缺省值为 ``False``。
+
+    .. attribute:: date_list_period
+
+        **可选** 定义 ``date_list`` 的聚合时间段的字符串。它必须是 ``'year'``（默认值），``'month'`` 或 ``'day'`` 之一。
+
+    .. method:: get_dated_items()
+
+        返回包含（``date_list``，``object_list``，``extra_context``）的 3 元组。
+
+        ``date_list`` 是数据可用的日期列表。``object_list`` 是对象的列表。``extra_context`` 是将被添加到由 :class:`~django.views.generic.list.MultipleObjectMixin` 提供的任何上下文数据的上下文数据的字典。
+
+    .. method:: get_dated_queryset(**lookup)
+
+        返回查询集，使用由 ``lookup`` 定义的查询参数进行过滤。强制执行对查询集的任何限制，例如 ``allow_empty`` 和 ``allow_future``。
+
+    .. method:: get_date_list_period()
+
+        返回 ``date_list`` 的聚合周期。默认情况下返回 :attr:`~BaseDateListView.date_list_period`。
+
+    .. method:: get_date_list(queryset, date_type=None, ordering='ASC')
+
+        返回 ``queryset`` 包含条目的 ``date_type`` 类型的日期列表。例如，``get_date_list(qs, 'year')`` 将返回 ``qs``。如果未提供 ``date_type``，则使用 :meth:`~BaseDateListView.get_date_list_period` 的结果。``date_type`` 和 ``ordering`` 只是传递到 :meth:`QuerySet.dates()<django.db.models.query.QuerySet.dates>`。

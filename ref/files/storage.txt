@@ -1,0 +1,164 @@
+================
+文件储存 API
+================
+
+.. module:: django.core.files.storage
+
+获取当前的储存类
+=================================
+
+Django 提供了两个便捷的方法来获取当前的储存类：
+
+.. class:: DefaultStorage
+
+    :class:`~django.core.files.storage.DefaultStorage` 提供对当前的默认储存系统的延迟访问，像 :setting:`DEFAULT_FILE_STORAGE` 中定义的那样。:class:`DefaultStorage` 内部使用了 :func:`~django.core.files.storage.get_storage_class`。
+
+.. function:: get_storage_class(import_path=None)
+
+    返回实现储存 API 的类或者模块。
+
+    当没有带着 ``import_path`` 参数调用的时候，``get_storage_class`` 会返回当前默认的储存系统，像 :setting:`DEFAULT_FILE_STORAGE` 中定义的那样。如果提供了 ``import_path``，``get_storage_class`` 会尝试从提供的路径导入类或者模块，并且如果成功的话返回它。如果导入不成功会抛出异常。
+
+``FileSystemStorage`` 类
+===============================
+
+.. class:: FileSystemStorage(location=None, base_url=None, file_permissions_mode=None, directory_permissions_mode=None)
+
+    :class:`~django.core.files.storage.FileSystemStorage` 类在本地文件系统上实现了基本的文件存储功能。它继承自 :class:`~django.core.files.storage.Storage`，并且提供父类的所有公共方法的实现。
+
+    .. attribute:: location
+
+        储存文件的目录的绝对路径。默认为 :setting:`MEDIA_ROOT` 设置的值。
+
+    .. attribute:: base_url
+
+        在当前位置提供文件储存的 URL。默认为 :setting:`MEDIA_URL` 设置的值。
+
+    .. attribute:: file_permissions_mode
+
+        文件系统的许可，当文件保存时会接收到它。默认为 :setting:`FILE_UPLOAD_PERMISSIONS`。
+
+    .. attribute:: directory_permissions_mode
+
+        文件系统的许可，当目录保存时会接收到它。默认为 :setting:`FILE_UPLOAD_DIRECTORY_PERMISSIONS`。
+
+    .. note::
+
+        ``FileSystemStorage.delete()`` 在提供的文件名称不存在的时候并不会抛出任何异常。
+
+``Storage`` 类
+=====================
+
+.. class:: Storage
+
+    :class:`~django.core.files.storage.Storage` 类为文件的存储提供了标准化的 API，并带有一系列默认行为，所有其它的文件存储系统可以按需继承或者复写它们。
+
+    .. note::
+        对于返回原生 ``datetime`` 对象的方法，所使用的有效时区为 ``os.environ['TZ']`` 的当前值。要注意它总是可以通过 Django 的 :setting:`TIME_ZONE` 来设置。
+
+    .. method:: accessed_time(name)
+
+        返回包含文件的最后访问时间的原生 ``datetime`` 对象。对于不能够返回最后访问时间的储存系统，会抛出 ``NotImplementedError`` 异常。
+
+        .. deprecated:: 1.10
+
+            使用 :meth:`get_accessed_time` 代替。
+
+    .. method:: created_time(name)
+
+        返回包含文件创建时间的原生 ``datetime`` 对象。对于不能够返回创建时间的储存系统，会抛出 ``NotImplementedError`` 异常。
+
+        .. deprecated:: 1.10
+
+            使用 :meth:`get_created_time` 代替。
+
+    .. method:: delete(name)
+
+        删除 ``name``引用的文件。如果目标储存系统不支持删除操作，会抛出 ``NotImplementedError`` 异常。
+
+    .. method:: exists(name)
+
+        如果提供的名称所引用的文件在文件系统中存在，则返回 ``True``，否则如果这个名称可用于新文件，返回 ``False``。
+
+    .. method:: get_accessed_time(name)
+
+        .. versionadded:: 1.10
+
+        返回包含文件的最后访问时间的 :class:`~datetime.datetime` 对象。对于不能够返回最后访问时间的储存系统，会抛出 :exc:`NotImplementedError` 异常。
+
+        如果 :setting:`USE_TZ` 为 ``True``，返回一个对应的 ``datetime``，否则返回一个本地时区的原生 ``datetime``。
+
+    .. method:: get_available_name(name, max_length=None)
+
+        返回基于 ``name`` 参数的文件名称，它在目标储存系统中可用于写入新的内容。
+
+        如果提供了 ``max_length``，文件名称长度不会超过它。如果不能找到可用的、唯一的文件名称，会抛出 :exc:`SuspiciousFileOperation
+        <django.core.exceptions.SuspiciousOperation>` 异常。
+
+        如果 ``name`` 命名的文件已存在，一个下划线加上随机 7 个数字或字母的字符串会添加到文件名称的末尾，扩展名之前。
+
+    .. method:: get_created_time(name)
+
+        .. versionadded:: 1.10
+
+        返回包含文件创建时间的 :class:`~datetime.datetime` 对象。对于不能够返回创建时间的储存系统，会抛出 :exc:`NotImplementedError` 异常。
+
+        如果 :setting:`USE_TZ` 为 ``True``，返回一个对应的 ``datetime``，否则返回一个本地时区的原生 ``datetime``。
+
+    .. method:: get_modified_time(name)
+
+        .. versionadded:: 1.10
+
+        返回包含文件最后修改时间的 :class:`~datetime.datetime` 对象。对于不能够返回最后修改时间的储存系统，会抛出 :exc:`NotImplementedError` 异常。
+
+        如果 :setting:`USE_TZ` 为 ``True``，返回一个对应的 ``datetime``，否则返回一个本地时区的原生 ``datetime``。
+
+    .. method:: get_valid_name(name)
+
+        返回基于 ``name`` 参数的文件名称，它适用于目标储存系统。
+
+    .. method:: generate_filename(filename)
+
+        .. versionadded:: 1.10
+
+        调用 :attr:`get_valid_name()` 验证 ``filename`` 并返回一个传递给 :meth:`save` 方法的文件名。
+
+        ``filename`` 参数可能包含由 :attr:`FileField.upload_to <django.db.models.FileField.upload_to>` 返回的路径。在这种情况下，路径不会传递给 :attr:`get_valid_name()`，但会被预先附加到生成的名称。
+
+        默认实现使用：:mod:`os.path` 操作。 如果该方法不适合你的存储，请覆盖此方法。
+
+    .. method:: listdir(path)
+
+        列出特定目录的所有内容，返回一个包含2元组的列表；第一个元素是目录，第二个是文件。对于不能够提供列表功能的储存系统，抛出 ``NotImplementedError`` 异常。
+
+    .. method:: modified_time(name)
+
+        返回包含最后修改时间的原生 ``datetime`` 对象。对于不能够返回最后修改时间的储存系统，抛出 ``NotImplementedError`` 异常。
+
+        .. deprecated:: 1.10
+
+            使用 :meth:`get_modified_time` 代替。
+
+    .. method:: open(name, mode='rb')
+
+        通过提供的 ``name`` 打开文件。注意虽然返回的文件确保为 ``File`` 对象，但可能实际上是它的子类。在远程文件储存的情况下，这意味着读写操作会非常慢，所以警告一下。
+
+    .. method:: path(name)
+
+        本地文件系统的路径，文件可以用 Python 标准的 ``open()`` 在里面打开。对于不能从本地文件系统访问的储存系统，抛出 ``NotImplementedError`` 异常。
+
+    .. method:: save(name, content, max_length=None)
+
+        使用储存系统来保存一个新文件，最好带有特定的名称。如果名称为 ``name`` 的文件已存在，储存系统会按需修改文件名称来获取一个唯一的名称。返回被储存文件的实际名称。
+
+        ``max_length`` 参数会传递给 :meth:`get_available_name`。
+
+        ``content`` 参数必须为 :class:`django.core.files.File` 或者一个可以被 ``File`` 封装的类文件对象。
+
+    .. method:: size(name)
+
+        返回 ``name``所引用的文件的总大小，以字节为单位。对于不能够返回文件大小的储存系统，抛出 ``NotImplementedError`` 异常。
+
+    .. method:: url(name)
+
+        返回 URL，通过它可以访问到 ``name`` 所引用的文件。对于不支持通过 URL 访问的储存系统，抛出 ``NotImplementedError`` 异常。

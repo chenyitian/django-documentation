@@ -1,0 +1,265 @@
+==========
+中间件
+==========
+
+中间件是一个钩子框架，它们可以介入 Django 的请求和响应处理过程。它是一个轻量级、底层的“插件”系统，用于在全局修改 Django 的输入或输出。
+
+每个中间件组件负责完成某个特定的功能。例如，Django 包含的一个中间件组件 :class:`~django.contrib.auth.middleware.AuthenticationMiddleware`，它使用会话将用户和请求关联起来。
+
+这篇文档讲解中间件如何工作、如何激活中间件以及如何编写你自己的中间件。Django 集成了一些内建的中间件可以直接开箱即用。它们被归档在 :doc:`内建的中间件参考 </ref/middleware>`。
+
+.. versionchanged:: 1.10
+
+    引入了一种新型中间件，用于新的 :setting:`MIDDLEWARE` 设置。如果你使用旧的 :setting:`MIDDLEWARE_CLASSES` 设置，则需要 :ref:`调整旧的自定义中间件 <upgrading-middleware>`，然后才能使用新设置。本文档描述了新式中间件。有关旧式中间件如何工作的说明，请参阅旧版本文档中的此页。
+
+编写你自己的中间件
+===========================
+
+中间件工厂是可调用的，它使用一个可调用的 ``get_response`` 并返回一个中间件。中间件也是可调用的，它接受请求并返回响应，就像视图一样。
+
+一个中间件可以写成一个像这样的函数::
+
+    def simple_middleware(get_response):
+        # One-time configuration and initialization.
+
+        def middleware(request):
+            # Code to be executed for each request before
+            # the view (and later middleware) are called.
+
+            response = get_response(request)
+
+            # Code to be executed for each request/response after
+            # the view is called.
+
+            return response
+
+        return middleware
+
+或者它可以写成一个类，其实例是可调用的，像这样::
+
+    class SimpleMiddleware(object):
+        def __init__(self, get_response):
+            self.get_response = get_response
+            # One-time configuration and initialization.
+
+        def __call__(self, request):
+            # Code to be executed for each request before
+            # the view (and later middleware) are called.
+
+            response = self.get_response(request)
+
+            # Code to be executed for each request/response after
+            # the view is called.
+
+            return response
+
+Django 提供调用的 ``get_response`` 可能是实际的视图（如果这是最后列出的中间件），或者它可能是链中的下一个中间件。当前的中间件不需要知道或关心它到底是什么，它只是代表了下一步。
+
+上面是一个轻微的简化 —— ``get_response`` 调用链上的最后一个中间件将不是一个实际的视图，而在于运用的 :ref:`视图中间件 <view-middleware>` ，以适当的 URL 参数调用视图，以及运用的 :ref:`模板响应 <template-response-middleware>` 和 :ref:`异常 <exception-middleware>` 中间件处理器包装的方法。
+
+中间件可以放在你 Python 路径的任何地方。
+
+``__init__(get_response)``
+--------------------------
+
+中间件工厂必须接受一个 ``get_response`` 参数。你还可以为中间件初始化一些全局状态。请谨记几个提醒：
+
+* Django 只用 ``get_response`` 参数初始化你的中间件，因此你不能定义一个会请求任何其他参数的 ``__init__()`` 方法。
+
+* 不像 ``__call__()`` 对每个请求都要调用，``__init__()`` 只会被调用 *一次*，就是在 Web 服务器启动的时候。
+
+.. versionchanged:: 1.10
+
+    在旧版本中，``__init__()`` 不会在 Web 服务器响应第一个请求之前调用。
+
+    在旧版本中，``__init__()`` 不接受任何参数。要使你的中间件在 Django 1.9 及之前可用，让 ``get_response`` 成为可选参数（``get_response=None``）。
+
+将中间件标记为不使用
+----------------------------
+
+有时在运行时决定是否一个中间件需要被加载是很有用的。 在这种情况下，你的中间件中的 ``__init__()`` 方法可以抛出一个 :exc:`~django.core.exceptions.MiddlewareNotUsed` 异常。Django 会从中间件处理过程中移除这部分中间件，并且当 :setting:`DEBUG` 为 ``True`` 的时候在 :ref:`django-request-logger` 记录器中记录调试信息。
+
+激活中间件
+=====================
+
+要激活一个中间件组件，需要把它添加到你的 Django 配置文件中的 :setting:`MIDDLEWARE` 列表中。
+
+在 :setting:`MIDDLEWARE` 中，每一个中间件组件用字符串的方式描述：一个完整的 Python 全路径加上中间件的类名称。例如，使用 :djadmin:`django-admin startproject <startproject>` 创建工程的时候生成的默认值::
+
+    MIDDLEWARE = [
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    ]
+
+Django 的程序中，中间件不是必需的 —— 只要你喜欢，:setting:`MIDDLEWARE` 可以为空 —— 但是强烈推荐你至少使用 :class:`~django.middleware.common.CommonMiddleware`。
+
+:setting:`MIDDLEWARE` 中的顺序非常重要，因为一个中间件可能依赖于另外一个。例如，:class:`~django.contrib.auth.middleware.AuthenticationMiddleware` 在会话中储存已认证的用户。所以它必须在 :class:`~django.contrib.sessions.middleware.SessionMiddleware` 之后运行。一些关于Django中间件类的顺序的常见提示，请见 :ref:`middleware-ordering`。
+
+中间件顺序和分层
+=============================
+
+在请求阶段中，调用视图之前，Django 会按照 :setting:`MIDDLEWARE` 中定义的顺序自顶向下应用中间件。
+
+你可以把它想象成一个洋葱：每个中间件类是包裹视图的一层“皮”，视图是洋葱的核心。如果请求通过洋葱所有的皮（每层调用 ``get_response`` 将请求传递到下一层），一直到核心的视图，然后响应将通过每一层（以相反的顺序）再返回出来。
+
+如果其中一个层决定短路并返回响应而不调用它的 ``get_response``，则该层内的洋葱皮（包括视图）都不会看到请求或响应。响应将只返回通过请求传递的同一层。
+
+其他中间件钩子
+======================
+
+除了前面描述的基本请求/响应中间件模式，您可以向基于类的中间件添加其他三个特殊方法：
+
+.. _view-middleware:
+
+``process_view()``
+------------------
+
+.. method:: process_view(request, view_func, view_args, view_kwargs)
+
+``request`` 是一个 :class:`~django.http.HttpRequest` 对象。``view_func`` 是 Django 会调用的一个 Python 的函数。（它是一个真实的函数对象，不是函数的字符名称。)``view_args`` 是一个会被传递到视图的位置参数列表，而 ``view_kwargs`` 是一个会被传递到视图的关键字参数字典。``view_args`` 和 ``view_kwargs`` 都不包括第一个视图参数（``request``）。
+
+``process_view()`` 会在 Django 调用视图之前被调用。
+
+它将返回 ``None`` 或一个 :class:`~django.http.HttpResponse` 对象。如果返回 ``None``，Django 将会继续处理这个请求，执行其它的 ``process_view()`` 中间件，然后调用对应的视图。如果返回一个 :class:`~django.http.HttpResponse` 对象，Django 就不用再去调用对应的视图；它将对 :class:`~django.http.HttpResponse` 运用响应阶段的中间件，并返回结果。
+
+.. note::
+
+    在中间件内部，从 ``process_view()`` 中访问 :attr:`request.POST <django.http.HttpRequest.POST>` 将阻碍该中间件之后的所有视图无法 :ref:`修改请求的上传处理程序 <modifying_upload_handlers_on_the_fly>`，一般情况下要避免这样使用。
+
+    :class:`~django.middleware.csrf.CsrfViewMiddleware` 类可以被认为是个例外，因为它提供 :func:`~django.views.decorators.csrf.csrf_exempt` 和 :func:`~django.views.decorators.csrf.csrf_protect` 两个装饰器，允许视图显式控制在哪个点需要开启 CSRF 验证。
+
+.. _exception-middleware:
+
+``process_exception()``
+-----------------------
+
+.. method:: process_exception(request, exception)
+
+``request`` 是一个 :class:`~django.http.HttpRequest` 对象。``exception`` 是一个被视图中的方法抛出来的 ``Exception`` 对象。
+
+当一个视图抛出异常时，Django 会调用 ``process_exception()`` 来处理。``process_exception()`` 应该返回一个 ``None`` 或者一个 :class:`~django.http.HttpResponse` 对象。如果它返回一个 :class:`~django.http.HttpResponse` 对象，模型响应和响应中间件会被应用，响应结果会返回给浏览器。否则，:ref:`默认的异常处理机制 <error-views>` 将会被触发。
+
+再次提醒，在处理响应期间，中间件的执行顺序是倒序执行的，这包括 ``process_exception``。如果一个异常处理的中间件返回了一个响应，那 ``process_exception`` 方法所属的中间件类上面的中间件都将不会被调用。
+
+.. _template-response-middleware:
+
+``process_template_response()``
+-------------------------------
+
+.. method:: process_template_response(request, response)
+
+``request`` 是一个 :class:`~django.http.HttpRequest` 对象。``response`` 是一个 :class:`~django.template.response.TemplateResponse` 对象（或等价的对象），由 Django 视图或者中间件返回。
+
+如果响应的实例有 ``render()`` 方法，``process_template_response()`` 在视图刚好执行完毕之后被调用，这表明了它是一个 :class:`~django.template.response.TemplateResponse` 或等价的对象。
+
+这个方法必须返回一个实现了 ``render`` 方法的响应对象。它可以修改给定的 ``response`` 对象，通过修改 ``response.template_name`` 和 ``response.context_data`` 或者它可以创建一个全新的 :class:`~django.template.response.TemplateResponse` 或等价的对象。
+
+你不需要显式渲染响应 —— 一旦所有的模板响应中间件被调用，响应会自动被渲染。
+
+在一个响应的处理期间，中间件以相反的顺序运行，这包括 ``process_template_response()``。
+
+流式处理响应
+================================
+
+不像 :class:`~django.http.HttpResponse`，:class:`~django.http.StreamingHttpResponse` 并没有 ``content`` 属性。所以，中间件再也不能假设所有响应都带有 ``content`` 属性。如果它们需要访问内容，他们必须测试是否为流式响应，并相应地调整自己的行为::
+
+    if response.streaming:
+        response.streaming_content = wrap_streaming_content(response.streaming_content)
+    else:
+        response.content = alter_content(response.content)
+
+.. note::
+
+    我们需要假设 ``streaming_content`` 可能会大到在内存中无法容纳。响应中间件可能会把它封装在新的生成器中，但是一定不要销毁它。封装一般会实现成这样::
+
+        def wrap_streaming_content(content):
+            for chunk in content:
+                yield alter_content(chunk)
+
+异常处理
+==================
+
+Django automatically converts exceptions raised by the view or by middleware
+into an appropriate HTTP response with an error status code. :ref:`Certain
+exceptions <error-views>` are converted to 4xx status codes, while an unknown
+exception is converted to a 500 status code.
+
+This conversion takes place before and after each middleware (you can think of
+it as the thin film in between each layer of the onion), so that every
+middleware can always rely on getting some kind of HTTP response back from
+calling its ``get_response`` callable. Middleware don't need to worry about
+wrapping their call to ``get_response`` in a ``try/except`` and handling an
+exception that might have been raised by a later middleware or the view. Even
+if the very next middleware in the chain raises an
+:class:`~django.http.Http404` exception, for example, your middleware won't see
+that exception; instead it will get an :class:`~django.http.HttpResponse`
+object with a :attr:`~django.http.HttpResponse.status_code` of 404.
+
+.. _upgrading-middleware:
+
+升级 Django 1.10 之前的中间件
+==========================================
+
+.. class:: django.utils.deprecation.MiddlewareMixin
+    :module:
+
+Django provides ``django.utils.deprecation.MiddlewareMixin`` to ease creating
+middleware classes that are compatible with both :setting:`MIDDLEWARE` and the
+old :setting:`MIDDLEWARE_CLASSES`. All middleware classes included with Django
+are compatible with both settings.
+
+The mixin provides an ``__init__()`` method that accepts an optional
+``get_response`` argument and stores it in ``self.get_response``.
+
+The ``__call__()`` method:
+
+#. Calls ``self.process_request(request)`` (if defined).
+#. Calls ``self.get_response(request)`` to get the response from later
+   middleware and the view.
+#. Calls ``self.process_response(request, response)`` (if defined).
+#. Returns the response.
+
+If used with :setting:`MIDDLEWARE_CLASSES`, the ``__call__()`` method will
+never be used; Django calls ``process_request()`` and ``process_response()``
+directly.
+
+In most cases, inheriting from this mixin will be sufficient to make an
+old-style middleware compatible with the new system with sufficient
+backwards-compatibility. The new short-circuiting semantics will be harmless or
+even beneficial to the existing middleware. In a few cases, a middleware class
+may need some changes to adjust to the new semantics.
+
+These are the behavioral differences between using :setting:`MIDDLEWARE` and
+:setting:`MIDDLEWARE_CLASSES`:
+
+1. Under :setting:`MIDDLEWARE_CLASSES`, every middleware will always have its
+   ``process_response`` method called, even if an earlier middleware
+   short-circuited by returning a response from its ``process_request``
+   method. Under :setting:`MIDDLEWARE`, middleware behaves more like an onion:
+   the layers that a response goes through on the way out are the same layers
+   that saw the request on the way in. If a middleware short-circuits, only
+   that middleware and the ones before it in :setting:`MIDDLEWARE` will see the
+   response.
+
+2. Under :setting:`MIDDLEWARE_CLASSES`, ``process_exception`` is applied to
+   exceptions raised from a middleware ``process_request`` method. Under
+   :setting:`MIDDLEWARE`, ``process_exception`` applies only to exceptions
+   raised from the view (or from the ``render`` method of a
+   :class:`~django.template.response.TemplateResponse`). Exceptions raised from
+   a middleware are converted to the appropriate HTTP response and then passed
+   to the next middleware.
+
+3. Under :setting:`MIDDLEWARE_CLASSES`, if a ``process_response`` method raises
+   an exception, the ``process_response`` methods of all earlier middleware are
+   skipped and a ``500 Internal Server Error`` HTTP response is always
+   returned (even if the exception raised was e.g. an
+   :class:`~django.http.Http404`). Under :setting:`MIDDLEWARE`, an exception
+   raised from a middleware will immediately be converted to the appropriate
+   HTTP response, and then the next middleware in line will see that
+   response. Middleware are never skipped due to a middleware raising an
+   exception.

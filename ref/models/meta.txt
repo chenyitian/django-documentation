@@ -1,0 +1,223 @@
+===================
+模型 ``_meta`` API
+===================
+
+.. module:: django.db.models.options
+   :synopsis: Model meta-class layer
+
+.. class:: Options
+
+模型 ``_meta`` API 是 Django ORM 的核心。它使系统的其他部分（如查找，查询，表单和管理员）能够了解每个模型的功能。API可通过每个模型类的 ``_meta`` 属性访问，该属性是 ``django.db.models.options.Options`` 对象的实例。
+
+它提供的方法可以用于：
+
+* 检索模型的所有字段实例
+* 按名称检索模型的单个字段实例
+
+.. _model-meta-field-api:
+
+Field 访问 API
+================
+
+按名称检索模型的单个字段实例
+-----------------------------------------------------
+
+.. method:: Options.get_field(field_name)
+
+    返回给定字段名称的字段实例。
+
+    ``field_name`` 可以是模型上的字段名称，抽象或继承模型上的字段，或在指向模型的另一个模型上定义的字段。在后一种情况下，``field_name`` 将是由用户定义的 ``related_name`` 或由 Django 本身自动生成的名称。
+
+    :attr:`Hidden fields <django.db.models.Field.hidden>` 无法按名称检索。
+
+    如果找不到具有给定名称的字段，则会抛出 :class:`~django.core.exceptions.FieldDoesNotExist` 异常。
+
+    .. code-block:: python
+
+        >>> from django.contrib.auth.models import User
+
+        # A field on the model
+        >>> User._meta.get_field('username')
+        <django.db.models.fields.CharField: username>
+
+        # A field from another model that has a relation with the current model
+        >>> User._meta.get_field('logentry')
+        <ManyToOneRel: admin.logentry>
+
+        # A non existent field
+        >>> User._meta.get_field('does_not_exist')
+        Traceback (most recent call last):
+            ...
+        FieldDoesNotExist: User has no field named 'does_not_exist'
+
+检索模型的所有字段实例
+-----------------------------------------
+
+.. method:: Options.get_fields(include_parents=True, include_hidden=False)
+
+    返回与模型关联的字段的元组。``get_fields()`` 接受两个参数，可用于控制返回的字段：
+
+    ``include_parents``
+        默认为 ``True``。递归地包括在父类上定义的字段。如果设置为 ``False``，``get_fields()`` 将只搜索在当前模型上直接声明的字段。来自直接从抽象模型或代理类继承的模型的字段被认为是本地的，而不是父级的。
+
+    ``include_hidden``
+        默认为 ``False``。如果设置为 ``True``，则 ``get_fields()`` 将包含用于返回其他字段功能的字段。这还将包括具有以“+”开头的 ``related_name`` （例如 :class:`~django.db.models.ManyToManyField` 或 :class:`~django.db.models.ForeignKey`）的任何字段。
+
+    .. code-block:: python
+
+        >>> from django.contrib.auth.models import User
+        >>> User._meta.get_fields()
+        (<ManyToOneRel: admin.logentry>,
+         <django.db.models.fields.AutoField: id>,
+         <django.db.models.fields.CharField: password>,
+         <django.db.models.fields.DateTimeField: last_login>,
+         <django.db.models.fields.BooleanField: is_superuser>,
+         <django.db.models.fields.CharField: username>,
+         <django.db.models.fields.CharField: first_name>,
+         <django.db.models.fields.CharField: last_name>,
+         <django.db.models.fields.EmailField: email>,
+         <django.db.models.fields.BooleanField: is_staff>,
+         <django.db.models.fields.BooleanField: is_active>,
+         <django.db.models.fields.DateTimeField: date_joined>,
+         <django.db.models.fields.related.ManyToManyField: groups>,
+         <django.db.models.fields.related.ManyToManyField: user_permissions>)
+
+        # Also include hidden fields.
+        >>> User._meta.get_fields(include_hidden=True)
+        (<ManyToOneRel: auth.user_groups>,
+         <ManyToOneRel: auth.user_user_permissions>,
+         <ManyToOneRel: admin.logentry>,
+         <django.db.models.fields.AutoField: id>,
+         <django.db.models.fields.CharField: password>,
+         <django.db.models.fields.DateTimeField: last_login>,
+         <django.db.models.fields.BooleanField: is_superuser>,
+         <django.db.models.fields.CharField: username>,
+         <django.db.models.fields.CharField: first_name>,
+         <django.db.models.fields.CharField: last_name>,
+         <django.db.models.fields.EmailField: email>,
+         <django.db.models.fields.BooleanField: is_staff>,
+         <django.db.models.fields.BooleanField: is_active>,
+         <django.db.models.fields.DateTimeField: date_joined>,
+         <django.db.models.fields.related.ManyToManyField: groups>,
+         <django.db.models.fields.related.ManyToManyField: user_permissions>)
+
+.. _migrating-old-meta-api:
+
+从旧 API 迁移
+==========================
+
+作为 ``Model._meta`` API（从 :class:`django.db.models.options.Options` 类）的形式化的一部分，已经弃用了一些方法和属性，将在 Django 1.10 中删除。
+
+这些旧的 API 可以复制：
+
+* 调用 :meth:`Options.get_field()
+  <django.db.models.options.Options.get_field()>`，或；
+
+* 调用 :meth:`Options.get_fields()
+  <django.db.models.options.Options.get_fields()>` 以检索所有字段的列表，然后使用 :ref:`字段属性 <model-field-attributes>` 过滤此列表（或在 ``_with_model`` 变化）所需字段的属性。
+
+虽然可以对旧方法进行严格等同的替换，但这可能不是最好的方法。花费时间重构任何字段循环以更好地使用新的 API —— 并且可能包括先前被排除的字段 —— 几乎肯定会导致更好的代码。
+
+假设您有一个名为 ``MyModel`` 的模型，可以进行以下替换，将代码转换为新的 API：
+
+* ``MyModel._meta.get_field(name)`` becomes::
+
+      f = MyModel._meta.get_field(name)
+
+  然后检查：
+
+  - ``f.auto_created == False``，因为新的 ``get_field()``
+    API 会找到 “反向” 关联关系，并且：
+
+  - ``f.is_relation 和 f.related_model 为 None``，因为新的 ``get_field()`` API 会找到 :class:`~django.contrib.contenttypes.fields.GenericForeignKey` 关系。
+
+* ``MyModel._meta.get_field_by_name(name)`` 通过以下替换返回这四个值的元组：
+
+  - ``field`` 可以通过 ``MyModel._meta.get_field(name)`` 找到。
+
+  - ``model`` 可以通过字段上的 :attr:`~django.db.models.Field.model` 属性找到。
+
+  - ``direct`` 可以通过：``not field.auto_created 或 field.concrete`` 找到。
+
+    The :attr:`~django.db.models.Field.auto_created` 检查排除由 Django 创建的所有“正向”和“反向”关联关系，但这也包括代理模型上的 ``AutoField`` 和 ``OneToOneField``。我们避免使用 :attr:`concrete <django.db.models.Field.concrete>` 属性过滤这些属性。
+
+  - ``m2m`` 可以通过字段上的 :attr:`~django.db.models.Field.many_to_many` 属性找到。
+
+* ``MyModel._meta.get_fields_with_model()`` becomes::
+
+      [
+          (f, f.model if f.model != MyModel else None)
+          for f in MyModel._meta.get_fields()
+          if not f.is_relation
+              or f.one_to_one
+              or (f.many_to_one and f.related_model)
+      ]
+
+* ``MyModel._meta.get_concrete_fields_with_model()`` becomes::
+
+      [
+          (f, f.model if f.model != MyModel else None)
+          for f in MyModel._meta.get_fields()
+          if f.concrete and (
+              not f.is_relation
+              or f.one_to_one
+              or (f.many_to_one and f.related_model)
+          )
+      ]
+
+* ``MyModel._meta.get_m2m_with_model()`` becomes::
+
+      [
+          (f, f.model if f.model != MyModel else None)
+          for f in MyModel._meta.get_fields()
+          if f.many_to_many and not f.auto_created
+      ]
+
+* ``MyModel._meta.get_all_related_objects()`` becomes::
+
+      [
+          f for f in MyModel._meta.get_fields()
+          if (f.one_to_many or f.one_to_one)
+          and f.auto_created and not f.concrete
+      ]
+
+* ``MyModel._meta.get_all_related_objects_with_model()`` becomes::
+
+      [
+          (f, f.model if f.model != MyModel else None)
+          for f in MyModel._meta.get_fields()
+          if (f.one_to_many or f.one_to_one)
+          and f.auto_created and not f.concrete
+      ]
+
+* ``MyModel._meta.get_all_related_many_to_many_objects()`` becomes::
+
+      [
+          f for f in MyModel._meta.get_fields(include_hidden=True)
+          if f.many_to_many and f.auto_created
+      ]
+
+* ``MyModel._meta.get_all_related_m2m_objects_with_model()`` becomes::
+
+      [
+          (f, f.model if f.model != MyModel else None)
+          for f in MyModel._meta.get_fields(include_hidden=True)
+          if f.many_to_many and f.auto_created
+      ]
+
+* ``MyModel._meta.get_all_field_names()`` becomes::
+
+      from itertools import chain
+      list(set(chain.from_iterable(
+          (field.name, field.attname) if hasattr(field, 'attname') else (field.name,)
+          for field in MyModel._meta.get_fields()
+          # For complete backwards compatibility, you may want to exclude
+          # GenericForeignKey from the results.
+          if not (field.many_to_one and field.related_model is None)
+      )))
+
+  这提供了 100% 向后兼容的替换，确保包括字段名称和属性名称 ``ForeignKey``，但与 ``GenericForeignKey`` 相关联的字段不包括。一个更简单的版本是::
+
+      [f.name for f in MyModel._meta.get_fields()]
+
+  虽然这不是 100% 向后兼容，但在许多情况下可能就足够了。

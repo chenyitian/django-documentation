@@ -1,0 +1,14 @@
+========================
+基于类的视图的 Mixin
+========================
+
+基于类的视图的 API 参考。介绍材料，参见 :doc:`/topics/class-based-views/mixins`。
+
+.. toctree::
+   :maxdepth: 1
+
+   mixins-simple
+   mixins-single-object
+   mixins-multiple-object
+   mixins-editing
+   mixins-date-based

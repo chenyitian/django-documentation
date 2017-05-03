@@ -1,0 +1,154 @@
+======================
+多个对象的 Mixin
+======================
+
+``MultipleObjectMixin``
+=======================
+
+.. class:: django.views.generic.list.MultipleObjectMixin
+
+    可用于显示对象列表的 Mixin。
+
+    如果指定 ``paginate_by``，Django 将对由此返回的结果进行分页。您可以通过以下两种方法之一在 URL 中指定页码：
+
+    * 使用 URLconf 中的 ``page`` 参数。例如，这是您的 URLconf 可能是什么样子::
+
+        url(r'^objects/page(?P<page>[0-9]+)/$', PaginatedView.as_view()),
+
+    * 通过 ``page`` 查询字符串参数传递页码。例如，网址如下所示::
+
+        /objects/?page=3
+
+    这些值和列表是基于 1 的，而不是基于 0 的，因此第一页将表示为页 ``1``。
+
+    有关分页的更多信息，请阅读 :doc:`分页文档
+    </topics/pagination>`。
+
+    作为特殊情况，您还可以使用 ``last`` 作为 ``page`` 的值::
+
+        /objects/?page=last
+
+    这允许您访问结果的最后一页，而不必先确定有多少页。
+
+    请注意，``page`` *必须* 是有效的页码或值 ``last``；``page`` 的任何其他值将导致 404 错误。
+
+    **延伸**
+
+    * :class:`django.views.generic.base.ContextMixin`
+
+    **方法和属性**
+
+    .. attribute:: allow_empty
+
+        一个指定如果没有对象可用，是否显示页面的布尔值。如果这是 ``False`` 并且没有可用的对象，视图将引发 404 而不是显示一个空页面。默认情况下，这是 ``True``。
+
+    .. attribute:: model
+
+        此视图用于显示数据的模型。指定 ``model = Foo`` 效果等同于指定 ``queryset = Foo.objects.all()``，其中 ``objects`` 表示 ``Foo`` 的 :ref:`默认管理器 <default-managers>`。
+
+    .. attribute:: queryset
+
+        表示对象的一个 ``QuerySet``。如果提供，``queryset`` 的值将取代 :attr:`model` 的值。
+
+        .. warning::
+
+            ``queryset`` 是一个具有 *可变* 值的类属性，因此在直接使用它时必须小心。在使用它之前，要么调用它的 :meth:`~django.db.models.query.QuerySet.all` 方法，要么使用 :meth:`get_queryset` 来检索它，这些方法会处理幕后的克隆。
+
+    .. attribute:: ordering
+
+        指定应用于 ``queryset`` 的顺序的字符串或字符串列表。有效值与 :meth:`~django.db.models.query.QuerySet.order_by` 的值相同。
+
+    .. attribute:: paginate_by
+
+        一个整数，指定每页应显示多少个对象。如果指定，则视图将使用 ``paginate_by`` 个对象每页分页对象。该视图将期望在 URLconf 中指定的 ``page`` 查询字符串参数（通过 ``request.GET``）或 ``page`` 变量。
+
+    .. attribute:: paginate_orphans
+
+        一个整数，指定最后一页可以包含的“overflow”对象的数量。这会将最后一页上的 :attr:`paginate_by` 限制扩展到 ``paginate_orphans``，以保持最后一页的对象数量非常少。
+
+    .. attribute:: page_kwarg
+
+        指定用于页面参数的名称的字符串。视图将期望此参数可作为查询字符串参数（通过 ``request.GET``）或作为在 URLconf 中指定的关键字变量。默认为 ``page``。
+
+    .. attribute:: paginator_class
+
+       分页器类用于分页。默认情况下，使用 :class:`django.core.paginator.Paginator` 如果自定义分页器类与 :class:`django.core.paginator.Paginator` 没有相同的构造函数接口，则还需要为 :meth:`get_paginator` 提供实现。
+
+    .. attribute:: context_object_name
+
+        指定要在上下文中使用的变量的名称。
+
+    .. method:: get_queryset()
+
+        获取此视图的项目列表。这必须是可迭代的，并且可以是查询集（其中将启用查询集特定的行为）。
+
+    .. method:: get_ordering()
+
+        返回定义将应用于 ``queryset`` 的顺序的字符串（或字符串的可迭代字符串）。
+
+        默认返回 :attr:`ordering`。
+
+    .. method:: paginate_queryset(queryset, page_size)
+
+        返回包含（``paginator``，``page``，``object_list``，``is_paginated``）的 4 元组。
+
+        通过将 ``queryset`` 分页成大小为 ``page_size`` 的页面而构造。如果请求包含 ``page`` 参数（作为捕获的网址参数或 GET 参数），则 ``object_list`` 将对应于该网页中的对象。
+
+    .. method:: get_paginate_by(queryset)
+
+        返回要分页的项目数，或 ``None`` 表示无分页。默认情况下，这只返回 :attr:`paginate_by` 的值。
+
+    .. method:: get_paginator(queryset, per_page, orphans=0, allow_empty_first_page=True)
+
+        返回要用于此视图的分页器的实例。默认情况下，实例化 :attr:`paginator_class` 的实例。
+
+    .. method:: get_paginate_orphans()
+
+        一个整数，指定最后一页可以包含的“overflow”对象的数量。默认情况下，这只返回 :attr:`paginate_orphans` 的值。
+
+    .. method:: get_allow_empty()
+
+        返回一个指定如果没有对象可用，是否显示页面的布尔值。如果这是 ``False`` 并且没有可用的对象，视图将引发 404 而不是显示一个空页面。默认情况下，这是 ``True``。
+
+    .. method:: get_context_object_name(object_list)
+
+        返回将用于包含此视图正在操作的数据列表的上下文变量名称。如果 ``object_list`` 是 Django 对象的查询集，并且未设置 :attr:`context_object_name`，上下文的名字将被设置为构成查询集的模型的 ``model_name``，并以 ``'_list'`` 为后缀。例如，模型 ``Article`` 会有一个名为 ``article_list`` 的上下文对象。
+
+    .. method:: get_context_data(**kwargs)
+
+        返回用于显示对象列表的上下文数据。
+
+    **上下文**
+
+    * ``object_list``：此视图正在显示的对象列表。如果指定 ``context_object_name``，那么该变量也将在上下文中设置，其值与 ``object_list`` 相同。
+
+    * ``is_paginated``：表示结果是否分页的布尔值。具体来说，如果未指定页面大小，或者可用对象不跨越多个页面，则设置为 ``False``。
+
+    * ``paginator``：:class:`django.core.paginator.Paginator` 的实例。如果页面未分页，则此上下文变量将为 ``None``。
+
+    * ``page_obj``：:class:`django.core.paginator.Page` 的实例。如果页面未分页，则此上下文变量将为 ``None``。
+
+
+``MultipleObjectTemplateResponseMixin``
+=======================================
+
+.. class:: django.views.generic.list.MultipleObjectTemplateResponseMixin
+
+    一个对对象实例列表操作的视图执行基于模板的响应呈现的 Mixin 类。需要与其混合的视图提供 ``self.object_list``，视图操作的对象实例的列表。``self.object_list`` 可以是但不是必须是 :class:`~django.db.models.query.QuerySet`。
+
+    **延伸**
+
+    * :class:`~django.views.generic.base.TemplateResponseMixin`
+
+    **方法和属性**
+
+    .. attribute:: template_name_suffix
+
+        附加到自动生成的候选模板名称的后缀。默认后缀为 ``_list``。
+
+    .. method:: get_template_names()
+
+        返回候选模板名称的列表。返回以下列表：
+
+        * 视图上的 ``template_name`` 值（如果提供）
+        * ``<app_label>/<model_name><template_name_suffix>.html``

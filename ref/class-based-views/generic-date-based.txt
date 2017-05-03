@@ -1,0 +1,531 @@
+==================
+通用日期视图
+==================
+
+.. module:: django.views.generic.dates
+
+基于日期的通用视图（在 :mod:`django.views.generic.dates` 中提供）是用于显示基于日期的数据的向下钻取页面的视图。
+
+.. note::
+
+    此页面上的一些示例假设 ``myapp/models.py`` 中的 ``Article`` 模型已定义如下::
+
+        from django.db import models
+        from django.urls import reverse
+
+        class Article(models.Model):
+            title = models.CharField(max_length=200)
+            pub_date = models.DateField()
+
+            def get_absolute_url(self):
+                return reverse('article-detail', kwargs={'pk': self.pk})
+
+``ArchiveIndexView``
+====================
+
+.. class:: ArchiveIndexView
+
+    根据日期显示“最新”对象的顶级索引页。除非您将 ``allow_future`` 设置为 ``True``，否则不会包含日期在 *未来* 的对象。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseArchiveIndexView`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    **上下文**
+
+    除了 :class:`django.views.generic.list.MultipleObjectMixin` （通过 :class:`django.views.generic.dates.BaseDateListView`）提供的上下文，模板的上下文将是：
+
+    * ``date_list``：一个包含所有 ``queryset`` 相应可用对象的年份的 :meth:`QuerySet <django.db.models.query.QuerySet.dates>` 对象，表示为 :class:`datetime.datetime` 对象，按降序排列。
+
+    **备注**
+
+    * 使用 ``latest`` 作为默认 ``context_object_name``。
+    * 使用 ``_archive`` 作为默认 ``template_name_suffix``。
+    * 默认为按年提供 ``date_list``，但可以使用属性 ``date_list_period`` 更改为月或日。这也适用于所有子类视图。
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+        from django.views.generic.dates import ArchiveIndexView
+
+        from myapp.models import Article
+
+        urlpatterns = [
+            url(r'^archive/$',
+                ArchiveIndexView.as_view(model=Article, date_field="pub_date"),
+                name="article_archive"),
+        ]
+
+    **示例 myapp/article_archive.html**:
+
+    .. code-block:: html+django
+
+        <ul>
+            {% for article in latest %}
+                <li>{{ article.pub_date }}: {{ article.title }}</li>
+            {% endfor %}
+        </ul>
+
+    这将输出所有文章。
+
+``YearArchiveView``
+===================
+
+.. class:: YearArchiveView
+
+    一个年度归档页面，显示给定年份中的所有可用月份。除非您将 ``allow_future`` 设置为 ``True``，否则不会显示日期在 *未来* 的对象。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseYearArchiveView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    .. attribute:: make_object_list
+
+        一个布尔值，指定是否检索今年的完整对象列表，并将其传递给模板。如果 ``True`` 对象列表将可用于上下文。如果 ``False``，则 ``None`` 查询集将用作对象列表。默认情况下，这是 ``False``。
+
+    .. method:: get_make_object_list()
+
+        确定对象列表是否将作为上下文的一部分返回。默认返回 :attr:`~YearArchiveView.make_object_list`。
+
+    **上下文**
+
+    除了 :class:`django.views.generic.list.MultipleObjectMixin` （通过 :class:`django.views.generic.dates.BaseDateListView`）提供的上下文，模板的上下文将是：
+
+    * ``date_list``：一个包含所有 ``queryset`` 相应可用对象的月份的 :meth:`QuerySet <django.db.models.query.QuerySet.dates>` 对象，表示为 :class:`datetime.datetime` 对象，按升序排列。
+
+    * ``year``：代表给定年份的 :class:`~datetime.date` 对象。
+
+    * ``next_year``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示下一年第一天的 :class:`~datetime.date` 对象。
+      .
+
+    * ``previous_year``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示上一年第一天的 :class:`~datetime.date` 对象。
+
+    **备注**
+
+    * 使用 ``_archive_year`` 作为默认 ``template_name_suffix``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.dates import YearArchiveView
+
+        from myapp.models import Article
+
+        class ArticleYearArchiveView(YearArchiveView):
+            queryset = Article.objects.all()
+            date_field = "pub_date"
+            make_object_list = True
+            allow_future = True
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import ArticleYearArchiveView
+
+        urlpatterns = [
+            url(r'^(?P<year>[0-9]{4})/$',
+                ArticleYearArchiveView.as_view(),
+                name="article_year_archive"),
+        ]
+
+    **示例 myapp/article_archive_year.html**:
+
+    .. code-block:: html+django
+
+        <ul>
+            {% for date in date_list %}
+                <li>{{ date|date }}</li>
+            {% endfor %}
+        </ul>
+
+        <div>
+            <h1>All Articles for {{ year|date:"Y" }}</h1>
+            {% for obj in object_list %}
+                <p>
+                    {{ obj.title }} - {{ obj.pub_date|date:"F j, Y" }}
+                </p>
+            {% endfor %}
+        </div>
+
+``MonthArchiveView``
+====================
+
+.. class:: MonthArchiveView
+
+    显示给定月份中所有对象的月度归档页面。除非您将 ``allow_future`` 设置为 ``True``，否则不会显示日期在 *未来* 的对象。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseMonthArchiveView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.MonthMixin`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    **上下文**
+
+    除了 :class:`django.views.generic.list.MultipleObjectMixin` （通过 :class:`django.views.generic.dates.BaseDateListView`）提供的上下文，模板的上下文将是：
+
+    * ``date_list``：一个包含给定月份的所有 ``queryset`` 相应可用对象的天的 :meth:`QuerySet <django.db.models.query.QuerySet.dates>` 对象，表示为 :class:`datetime.datetime` 对象，按升序排列。
+
+    * ``month``：表示给定月份的 :class:`~datetime.date` 对象。
+
+    * ``next_month``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示下个月第一天的 :class:`~datetime.date` 对象。
+
+    * ``previous_month``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示上个月第一天的 :class:`~datetime.date` 对象。
+
+    **备注**
+
+    * 使用 ``_archive_month`` 作为默认 ``template_name_suffix``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.dates import MonthArchiveView
+
+        from myapp.models import Article
+
+        class ArticleMonthArchiveView(MonthArchiveView):
+            queryset = Article.objects.all()
+            date_field = "pub_date"
+            allow_future = True
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import ArticleMonthArchiveView
+
+        urlpatterns = [
+            # Example: /2012/aug/
+            url(r'^(?P<year>[0-9]{4})/(?P<month>[-\w]+)/$',
+                ArticleMonthArchiveView.as_view(),
+                name="archive_month"),
+            # Example: /2012/08/
+            url(r'^(?P<year>[0-9]{4})/(?P<month>[0-9]+)/$',
+                ArticleMonthArchiveView.as_view(month_format='%m'),
+                name="archive_month_numeric"),
+        ]
+
+    **示例 myapp/article_archive_month.html**:
+
+    .. code-block:: html+django
+
+        <ul>
+            {% for article in object_list %}
+                <li>{{ article.pub_date|date:"F j, Y" }}: {{ article.title }}</li>
+            {% endfor %}
+        </ul>
+
+        <p>
+            {% if previous_month %}
+                Previous Month: {{ previous_month|date:"F Y" }}
+            {% endif %}
+            {% if next_month %}
+                Next Month: {{ next_month|date:"F Y" }}
+            {% endif %}
+        </p>
+
+``WeekArchiveView``
+===================
+
+.. class:: WeekArchiveView
+
+    显示给定周内所有对象的每周归档页面。除非您将 ``allow_future`` 设置为 ``True``，否则不会显示日期在 *未来* 的对象。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseWeekArchiveView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.WeekMixin`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    **上下文**
+
+    除了 :class:`~django.views.generic.list.MultipleObjectMixin` （通过 :class:`~django.views.generic.dates.BaseDateListView`）提供的上下文，模板的上下文将是：
+
+    * ``week``：表示给定周的第一天的 :class:`~datetime.date` 对象。
+
+    * ``next_week``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future` 表示下周第一天的 :class:`~datetime.date` 对象。
+
+    * ``previous_week``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示前一周第一天的 :class:`~datetime.date` 对象。
+
+    **备注**
+
+    * 使用 ``_archive_week`` 作为默认 ``template_name_suffix``。
+
+    * ``week_format`` 属性是一个 :func:`~time.strptime`，用于解析周数。支持以下值：
+
+      * ``'%U'``：基于美国周系统，其中周从星期天开始。这是默认值。
+
+      * ``'%W'``：类似于 ``'%U'``，除了它假定周从星期一开始。这与 ISO 8601 周编号不同。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.dates import WeekArchiveView
+
+        from myapp.models import Article
+
+        class ArticleWeekArchiveView(WeekArchiveView):
+            queryset = Article.objects.all()
+            date_field = "pub_date"
+            week_format = "%W"
+            allow_future = True
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import ArticleWeekArchiveView
+
+        urlpatterns = [
+            # Example: /2012/week/23/
+            url(r'^(?P<year>[0-9]{4})/week/(?P<week>[0-9]+)/$',
+                ArticleWeekArchiveView.as_view(),
+                name="archive_week"),
+        ]
+
+    **示例 myapp/article_archive_week.html**:
+
+    .. code-block:: html+django
+
+        <h1>Week {{ week|date:'W' }}</h1>
+
+        <ul>
+            {% for article in object_list %}
+                <li>{{ article.pub_date|date:"F j, Y" }}: {{ article.title }}</li>
+            {% endfor %}
+        </ul>
+
+        <p>
+            {% if previous_week %}
+                Previous Week: {{ previous_week|date:"W" }} of year {{ previous_week|date:"Y" }}
+            {% endif %}
+            {% if previous_week and next_week %}--{% endif %}
+            {% if next_week %}
+                Next week: {{ next_week|date:"W" }} of year {{ next_week|date:"Y" }}
+            {% endif %}
+        </p>
+
+    在此示例中，您输出的是周数。请记住，通过 :tfilter:`date` 模板过滤器使用 ``'W'``
+    格式字符计算的周数不总是与那些通过 :func:`~time.strftime` 和 :func:`~time.strptime` 使用 ``'%W'`` 格式字符计算的相同。对于 2015 年，例如，:tfilter:`date` 输出的周数比 :func:`~time.strftime` 输出的那些高一个。在 :tfilter:`date` 中没有一个与 ``'%U'`` :func:`~time.strftime` 格式字符串等价的，因此，您应避免使用 :tfilter:`date` 来为 ``WeekArchiveView`` 生成 URL。
+
+``DayArchiveView``
+==================
+
+.. class:: DayArchiveView
+
+    显示指定日期内所有对象的日期归档页面。除非您将 ``allow_future`` 设置为 ``True``，否则未来的日期都会抛出 404 错误，而不管未来是否存在任何对象。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseDayArchiveView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.MonthMixin`
+    * :class:`django.views.generic.dates.DayMixin`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    **上下文**
+
+    除了 :class:`~django.views.generic.list.MultipleObjectMixin` （通过 :class:`~django.views.generic.dates.BaseDateListView`）提供的上下文，模板的上下文将是：
+
+    * ``day``：代表给定日期的 :class:`~datetime.date` 对象。
+
+    * ``next_day``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示第二天的 :class:`~datetime.date` 对象。
+
+    * ``previous_day``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示前一天的 :class:`~datetime.date` 对象。
+
+    * ``next_month``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示下个月第一天的 :class:`~datetime.date` 对象。
+
+    * ``previous_month``：根据 :attr:`~BaseDateListView.allow_empty` 和 :attr:`~DateMixin.allow_future`，表示上个月第一天的 :class:`~datetime.date` 对象。
+
+    **备注**
+
+    * 使用 ``_archive_day`` 作为默认 ``template_name_suffix``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.dates import DayArchiveView
+
+        from myapp.models import Article
+
+        class ArticleDayArchiveView(DayArchiveView):
+            queryset = Article.objects.all()
+            date_field = "pub_date"
+            allow_future = True
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import ArticleDayArchiveView
+
+        urlpatterns = [
+            # Example: /2012/nov/10/
+            url(r'^(?P<year>[0-9]{4})/(?P<month>[-\w]+)/(?P<day>[0-9]+)/$',
+                ArticleDayArchiveView.as_view(),
+                name="archive_day"),
+        ]
+
+    **示例 myapp/article_archive_day.html**:
+
+    .. code-block:: html+django
+
+        <h1>{{ day }}</h1>
+
+        <ul>
+            {% for article in object_list %}
+                <li>{{ article.pub_date|date:"F j, Y" }}: {{ article.title }}</li>
+            {% endfor %}
+        </ul>
+
+        <p>
+            {% if previous_day %}
+                Previous Day: {{ previous_day }}
+            {% endif %}
+            {% if previous_day and next_day %}--{% endif %}
+            {% if next_day %}
+                Next Day: {{ next_day }}
+            {% endif %}
+        </p>
+
+``TodayArchiveView``
+====================
+
+.. class:: TodayArchiveView
+
+    显示 *今天* 的所有对象的日归档页面。这和 :class:`django.views.generic.dates.DayArchiveView` 完全一样，除了今天的日期使用 ``year``/``month``/``day`` 参数代替外。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseTodayArchiveView`
+    * :class:`django.views.generic.dates.BaseDayArchiveView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.MonthMixin`
+    * :class:`django.views.generic.dates.DayMixin`
+    * :class:`django.views.generic.dates.BaseDateListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * :class:`django.views.generic.base.View`
+
+    **备注**
+
+    * 使用 ``_archive_today`` 作为默认 ``template_name_suffix``。
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.dates import TodayArchiveView
+
+        from myapp.models import Article
+
+        class ArticleTodayArchiveView(TodayArchiveView):
+            queryset = Article.objects.all()
+            date_field = "pub_date"
+            allow_future = True
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import ArticleTodayArchiveView
+
+        urlpatterns = [
+            url(r'^today/$',
+                ArticleTodayArchiveView.as_view(),
+                name="archive_today"),
+        ]
+
+    .. admonition:: ``TodayArchiveView`` 的示例模板在哪里？
+
+        此视图默认使用与上一个示例中的 :class:`~DayArchiveView` 相同的模板。如果您需要其他模板，请将 ``template_name`` 属性设置为新模板的名称。
+
+``DateDetailView``
+==================
+
+.. class:: DateDetailView
+
+    表示个别对象的网页。如果对象的日期值在未来，默认情况下视图将抛出 404 错误，除非你将 ``allow_future`` 设置为 ``True``。
+
+    **祖先（MRO）**
+
+    * :class:`django.views.generic.detail.SingleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.dates.BaseDateDetailView`
+    * :class:`django.views.generic.dates.YearMixin`
+    * :class:`django.views.generic.dates.MonthMixin`
+    * :class:`django.views.generic.dates.DayMixin`
+    * :class:`django.views.generic.dates.DateMixin`
+    * ``django.views.generic.detail.BaseDetailView``
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+    * :class:`django.views.generic.base.View`
+
+    **上下文**
+
+    * 包含与 ``DateDetailView`` 中指定的 ``model`` 相关联的单个对象。
+
+    **备注**
+
+    * 使用 ``_detail`` 作为默认 ``template_name_suffix``。
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+        from django.views.generic.dates import DateDetailView
+
+        urlpatterns = [
+            url(r'^(?P<year>[0-9]{4})/(?P<month>[-\w]+)/(?P<day>[0-9]+)/(?P<pk>[0-9]+)/$',
+                DateDetailView.as_view(model=Article, date_field="pub_date"),
+                name="archive_date_detail"),
+        ]
+
+    **示例 myapp/article_detail.html**:
+
+    .. code-block:: html+django
+
+        <h1>{{ object.title }}</h1>
+
+.. note::
+
+    上面列出的所有通用视图都具有匹配的 ``Base`` 视图，区别仅在于他们不包含 :class:`~django.views.generic.list.MultipleObjectTemplateResponseMixin` （对于归档视图）或 :class:`~django.views.generic.detail.SingleObjectTemplateResponseMixin` （对于 :class:`DateDetailView` 视图）：
+
+    .. class:: BaseArchiveIndexView
+
+    .. class:: BaseYearArchiveView
+
+    .. class:: BaseMonthArchiveView
+
+    .. class:: BaseWeekArchiveView
+
+    .. class:: BaseDayArchiveView
+
+    .. class:: BaseTodayArchiveView
+
+    .. class:: BaseDateDetailView

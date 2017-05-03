@@ -1,0 +1,223 @@
+==========
+基础视图
+==========
+
+下面三个类提供创建 Django 视图所需要的大部分功能。你可以认为它们是 *父* 视图，它们可以直接使用或者被继承。它们不能满足项目中所有的需求，在这种情况下有 Mixin 和基于类的通用视图。
+
+Django 许多内建的基于类的视图继承自其它基于类的视图或者各种 Mixin。因为继承链非常重要，它们的祖先类会在标题为 **祖先（MRO）** 的小节中显示。MRO 是方法解析顺序（Method Resolution Order） 的缩写。
+
+``View``
+========
+
+.. class:: django.views.generic.base.View
+
+    基于类的基础视图的核心。其它所有的基于类的视图都继承自这个基础类。它不是严格的通用视图，因此也可以从 ``django.views`` 中导入。
+
+    .. versionchanged:: 1.10
+
+        能够从 ``django.views`` 中导入。
+
+    **方法流程**
+
+    1. :meth:`dispatch()`
+    2. :meth:`http_method_not_allowed()`
+    3. :meth:`options()`
+
+    **示例 views.py**::
+
+        from django.http import HttpResponse
+        from django.views import View
+
+        class MyView(View):
+
+            def get(self, request, *args, **kwargs):
+                return HttpResponse('Hello, World!')
+
+    **示例 urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import MyView
+
+        urlpatterns = [
+            url(r'^mine/$', MyView.as_view(), name='my-view'),
+        ]
+
+    **属性**
+
+    .. attribute:: http_method_names
+
+        该视图接受的 HTTP 方法名称列表。
+
+        默认::
+
+            ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']
+
+    **方法**
+
+    .. classmethod:: as_view(**initkwargs)
+
+        返回一个可调用的视图，它接受一个请求并返回一个响应::
+
+            response = MyView.as_view()(request)
+
+        .. versionadded:: 1.9
+
+        返回的视图拥有 ``view_class`` 和 ``view_initkwargs`` 属性。
+
+    .. method:: dispatch(request, *args, **kwargs)
+
+        视图的 ``view`` 部分 —— 该方法接受一个 ``request`` 加上其它参数并返回一个 HTTP 响应。
+
+        默认的实现是检查 HTTP 的方法，然后委托给一个与之匹配的方法； ``GET`` 请求将委托给 ``get()``，``POST`` 请求给 ``post()``，等等。
+
+        默认情况下，``HEAD`` 将委托给 ``get()``。如果处理 ``HEAD`` 请求的方式需要与 ``GET`` 不同，你可以覆盖 ``head()`` 方法。参见 :ref:`supporting-other-http-methods` 中的一个例子。
+
+    .. method:: http_method_not_allowed(request, *args, **kwargs)
+
+        如果视图被一个它所不支持的 HTTP 方法调用，将会调用这个方法。
+
+        默认的实现是返回 ``HttpResponseNotAllowed``，并带有一个纯文本格式的允许的方法列表。
+
+    .. method:: options(request, *args, **kwargs)
+
+        响应 OPTIONS HTTP 请求。返回一个包含允许的 HTTP 方法列表的 ``Allow`` 头。
+
+
+``TemplateView``
+================
+
+.. class:: django.views.generic.base.TemplateView
+
+    渲染一个给定的模板，其上下文包含从 URL 捕获的参数。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.base.ContextMixin`
+    * :class:`django.views.generic.base.View`
+
+    **方法流程**
+
+    1. :meth:`~django.views.generic.base.View.dispatch()`
+    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    3. :meth:`~django.views.generic.base.ContextMixin.get_context_data()`
+
+    **示例 views.py**::
+
+        from django.views.generic.base import TemplateView
+
+        from articles.models import Article
+
+        class HomePageView(TemplateView):
+
+            template_name = "home.html"
+
+            def get_context_data(self, **kwargs):
+                context = super(HomePageView, self).get_context_data(**kwargs)
+                context['latest_articles'] = Article.objects.all()[:5]
+                return context
+
+    **示例 urls.py**::
+
+        from django.conf.urls import url
+
+        from myapp.views import HomePageView
+
+        urlpatterns = [
+            url(r'^$', HomePageView.as_view(), name='home'),
+        ]
+
+    **上下文**
+
+    * 以 URL 中捕获的关键字参数填充（通过 :class:`~django.views.generic.base.ContextMixin`）。
+
+``RedirectView``
+================
+
+.. class:: django.views.generic.base.RedirectView
+
+    重定向到一个给定的 URL。
+
+    给定的 URL 可以包含字典形式的字符串格式化形式，它将用 URL 中捕获的参数替换。因为 *始终* 执行关键字形式的替换（即使没有传递参数），URL 中的任何 ``"%"`` 字符必须写成 ``"%%"``，这样 Python 才会在输出中将它们转换成单个百分号。
+
+    如果给定的 URL 为 ``None``，Django 将返回一个 ``HttpResponseGone`` （410）。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.base.View`
+
+    **方法流程**
+
+    1. :meth:`~django.views.generic.base.View.dispatch()`
+    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    3. :meth:`get_redirect_url()`
+
+    **示例 views.py**::
+
+        from django.shortcuts import get_object_or_404
+        from django.views.generic.base import RedirectView
+
+        from articles.models import Article
+
+        class ArticleCounterRedirectView(RedirectView):
+
+            permanent = False
+            query_string = True
+            pattern_name = 'article-detail'
+
+            def get_redirect_url(self, *args, **kwargs):
+                article = get_object_or_404(Article, pk=kwargs['pk'])
+                article.update_counter()
+                return super(ArticleCounterRedirectView, self).get_redirect_url(*args, **kwargs)
+
+    **示例 urls.py**::
+
+        from django.conf.urls import url
+        from django.views.generic.base import RedirectView
+
+        from article.views import ArticleCounterRedirectView, ArticleDetail
+
+        urlpatterns = [
+            url(r'^counter/(?P<pk>[0-9]+)/$', ArticleCounterRedirectView.as_view(), name='article-counter'),
+            url(r'^details/(?P<pk>[0-9]+)/$', ArticleDetail.as_view(), name='article-detail'),
+            url(r'^go-to-django/$', RedirectView.as_view(url='https://djangoproject.com'), name='go-to-django'),
+        ]
+
+    **属性**
+
+    .. attribute:: url
+
+        字符串形式的重定向 URL。如果为 ``None``，则抛出一个 410（Gone） HTTP 错误。
+
+    .. attribute:: pattern_name
+
+        重定向的目标 URL 模式的名称。将使用与传递给视图的相同位置参数和关键字参数做反查。
+
+    .. attribute:: permanent
+
+        重定向是否应该是永久的。唯一的区别是返回的 HTTP 状态码。如果为 ``True``，那么重定向将使用状态码 301。如果为 ``False``，那么重定向将使用状态码 302。``permanent`` 默认为 ``True``。
+
+        .. versionchanged:: 1.9
+
+            ``permanent`` 属性的默认值从 ``True`` 改为 ``False``。
+
+    .. attribute:: query_string
+
+        是否将 GET 的查询字符串一起传递给新的地址。如果为 ``True``，那么查询字符串将附加到 URL 的后面。如果为 ``False``，那么查询字符串将被丢弃。``query_string`` 默认为 ``False``。
+
+    **方法**
+
+    .. method:: get_redirect_url(*args, **kwargs)
+
+        构造重定向的目标 URL。
+
+        默认的实现使用 :attr:`url` 作为开始的字符串并使用 ``%`` 操作符将 URL 中捕获的命名参数替换到字符串中。
+
+        如果没有设置 :attr:`url`，``get_redirect_url()`` 将尝试使用 URL 中捕获的内容来反查 :attr:`pattern_name` （命名和未命名的参数都用）。
+
+        如果有查询字符串并且  :attr:`query_string` 为 ``True``，它还会将查询字符串添加到生成的 URL 的后面。子类可以实现任意行为，只要改方法返回一个可以重定向的 URL 字符串。

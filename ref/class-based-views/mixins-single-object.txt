@@ -1,0 +1,111 @@
+====================
+单个对象的 Mixin
+====================
+
+``SingleObjectMixin``
+=====================
+
+.. class:: django.views.generic.detail.SingleObjectMixin
+
+    提供一种查找与当前 HTTP 请求关联的对象的机制。
+
+    **方法和属性**
+
+    .. attribute:: model
+
+        此视图用于显示数据的模型。指定 ``model = Foo`` 效果等同于指定 ``queryset = Foo.objects.all()``，其中 ``objects`` 表示 ``Foo`` 的 :ref:`默认管理器 <default-managers>`。
+
+    .. attribute:: queryset
+
+        表示对象的一个 ``QuerySet``。如果提供，``queryset`` 的值将取代 :attr:`model` 的值。
+
+        .. warning::
+
+            ``queryset`` 是一个具有 *可变* 值的类属性，因此在直接使用它时必须小心。在使用它之前，要么调用它的 :meth:`~django.db.models.query.QuerySet.all` 方法，要么使用 :meth:`get_queryset` 来检索它，这些方法会处理幕后的克隆。
+
+    .. attribute:: slug_field
+
+        模型中包含 slug 的字段。``slug_field`` 默认为 ``'slug'``。
+
+    .. attribute:: slug_url_kwarg
+
+        URLConf 中包含 slug 关键字参数的名称。``slug_url_kwarg`` 默认为 ``'slug'``。
+
+    .. attribute:: pk_url_kwarg
+
+        URLConf 中，包含主键的关键字参数的名称。默认情况下，``pk_url_kwarg`` 为 ``'pk'``。
+
+    .. attribute:: context_object_name
+
+        指定在上下文中使用的变量的名称。
+
+    .. attribute:: query_pk_and_slug
+
+        如果为 ``True``，则会导致 :meth:`get_object()` 使用主键和 slug 执行查找。默认为 ``False``。
+
+        此属性可以帮助缓解 `不安全的直接对象引用`_ 攻击。当应用程序允许通过顺序主键访问单个对象时，攻击者可以粗暴猜测所有 URL；从而获得应用程序中的所有对象的列表。如果应该阻止访问单个对象的用户获取此列表，将 ``query_pk_and_slug`` 设置为 ``True`` 将有助于防止猜测 URL，因为每个URL 都需要两个正确的，顺序参数。简单地使用独特的 slug 可能有相同的目的，但这种方案允许你有非独特的 slug。
+
+        .. _不安全的直接对象引用: https://www.owasp.org/index.php/Top_10_2013-A4-Insecure_Direct_Object_References
+
+    .. method:: get_object(queryset=None)
+
+        返回该视图要显示的对象。如果有设置 ``queryset``，该查询集将用于对象的源；否则，将使用 :meth:`get_queryset`。``get_object()`` 从视图的所有参数中查找 :attr:`pk_url_kwarg` 参数； 如果找到了这个参数，该方法使用这个参数的值执行一个基于主键的查询。如果这个参数没有找到，该方法查找 :attr:`slug_url_kwarg` 参数，使用 :attr:`slug_field` 字段执行针对 slug 的查询。
+
+        当 :attr:`query_pk_and_slug` 为 ``True`` 时，``get_object()`` 将使用主键和 slug 执行查找。
+
+    .. method:: get_queryset()
+
+        返回用来获取本视图显示对象的查询集。默认的，如果设置了 :attr:`queryset` 属性，:meth:`get_queryset` 返回它的值，否则该方法构造一个 :class:`~django.db.models.query.QuerySet` 通过调用 :attr:`model` 属性的默认管理器的 ``all()`` 方法。
+
+    .. method:: get_context_object_name(obj)
+
+        返回视图用来操作的上下文变量的名称。如果 :attr:`context_object_name` 没有被设置，上下文对象的名字将被设置为构成查询集的模型的 ``model_name``。比如，``Article`` 模型的上下文对象名字是 ``'article'``。
+
+    .. method:: get_context_data(**kwargs)
+
+        返回用于显示对象列表的上下文数据。
+
+        这个方法的基本实现需要 ``self.object`` 属性被视图赋值（即使是 ``None``）。如果在使用这个 Mixin 的时候请确认没有其他的内建视图也执行了该方法。
+
+        它返回一个带有这些内容的字典：
+
+        * ``object``：此视图正在显示的对象（``self.object``）。
+        * ``context_object_name``: ``self.object`` 也将存储在由 :meth:`get_context_object_name` 返回的名称下，默认为模型名称的小写版本。
+
+        .. admonition:: 上下文变量覆盖模板上下文处理器中的值
+
+            来自 :meth:`get_context_data` 的任何变量优先于 :ref:`上下文处理器 <subclassing-context-requestcontext>` 中的上下文变量。例如，如果你的视图将 :attr:`model` 属性设置为 :class:`~django.contrib.auth.models.User`，``user`` 的默认上下文对象名将覆盖:func:`django.contrib.auth.context_processors.auth` 上下文处理器中的 ``user`` 变量。使用 :meth:`get_context_object_name` 避免冲突。
+
+    .. method:: get_slug_field()
+
+        返回要用于通过 slug 查找的 slug 字段的名称。默认情况下，这简单地返回 :attr:`slug_field` 的值。
+
+
+``SingleObjectTemplateResponseMixin``
+=====================================
+
+.. class:: django.views.generic.detail.SingleObjectTemplateResponseMixin
+
+    一个 Mixin 类，对单个对象实例操作的视图执行基于模板的响应呈现。需要与其混合的视图提供 ``self.object``，视图操作的对象实例。``self.object`` 通常是（但不一定是） Django 模型的一个实例。如果视图正在构建新实例的过程中，则可以是 ``None``。
+
+    **延伸**
+
+    * :class:`~django.views.generic.base.TemplateResponseMixin`
+
+    **方法和属性**
+
+    .. attribute:: template_name_field
+
+        当前对象实例上的字段，可用于确定候选模板的名称。如果当前对象实例上的 ``template_name_field`` 本身或 ``template_name_field`` 的值为 ``None``，对象将不会用于候选模板名称。
+
+    .. attribute:: template_name_suffix
+
+        附加到自动生成的候选模板名称的后缀。默认后缀为 ``_detail``。
+
+    .. method:: get_template_names()
+
+        返回候选模板名称的列表。返回以下列表：
+
+        * 视图上的 ``template_name`` 值（如果提供）
+        * 视图正在操作的对象实例上的 ``template_name_field`` 字段的内容（如果可用）
+        * ``<app_label>/<model_name><template_name_suffix>.html``

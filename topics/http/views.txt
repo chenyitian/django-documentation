@@ -1,0 +1,118 @@
+=============
+编写视图
+=============
+
+一个视图函数，或者简短来说叫做 *视图*，是一个简单的 Python 函数，它接受 Web 请求，并且返回 Web 响应。响应可以是一张网页的 HTML 内容，一个重定向，一个 404 错误，一个 XML 文档，或者一张图片…… 是任何东西都可以。无论视图本身包含什么逻辑，都要返回响应。代码写在哪里也无所谓，只要它在你的 Python 目录下面。除此之外没有更多的要求了——可以说“没有什么神奇的地方”。为了能够把代码放在 *某个地方*，惯例是把视图放在叫做 ``views.py`` 的文件中，然后把它放到你的项目或者应用目录里。
+
+一个简单的视图
+=================
+
+下面是一个返回当前日期和时间作为 HTML 文档的视图::
+
+    from django.http import HttpResponse
+    import datetime
+
+    def current_datetime(request):
+        now = datetime.datetime.now()
+        html = "<html><body>It is now %s.</body></html>" % now
+        return HttpResponse(html)
+
+让我们逐行阅读上面的代码：
+
+* 首先，我们从 :mod:`django.http` 模块导入了 :class:`~django.http.HttpResponse` 类，以及 Python 的 ``datetime`` 库。
+
+* 接着，我们定义了 ``current_datetime`` 函数。它是一个视图函数。每个视图函数都应接收 :class:`~django.http.HttpRequest` 对象作为第一个参数，一般叫做 ``request``。
+
+  注意视图函数的名称并不重要；不需要用一个统一的命名方式来命名，以便让 Django 识别它。我们将其命名为 ``current_datetime``，是因为这个名称能够精确地反映出它的功能。
+
+* 这个视图会返回一个 :class:`~django.http.HttpResponse` 对象，其中包含生成的响应。每个视图函数都要返回 :class:`~django.http.HttpResponse` 对象。（有例外，我们接下来会讲。）
+
+.. admonition:: Django 中的时区
+
+    Django 中包含一个 :setting:`TIME_ZONE` 设置，默认为 ``America/Chicago``。可能并不是你住的地方，所以你可能会在设置文件里修改它。
+
+把你的 URL 映射到视图
+=====================
+
+所以，再重复一遍，这个视图函数返回了一个包含当前日期和时间的HTML页面。你需要创建 *URLconf* 来展示在特定的URL这一视图；详见 :doc:`/topics/http/urls`。
+
+返回错误
+================
+
+在 Django 中返回 HTTP 错误是相当容易的。有一些 :class:`~django.http.HttpResponse` 的子类代表不是 200（意思是 *“OK”*）的 HTTP 状态码。你可以在 :ref:`request/response <ref-httpresponse-subclasses>` 文档中找到所有可用的子类。你可以返回那些子类的一个实例，而不是普通的 :class:`~django.http.HttpResponse`，来表示一个错误。例如::
+
+    from django.http import HttpResponse, HttpResponseNotFound
+
+    def my_view(request):
+        # ...
+        if foo:
+            return HttpResponseNotFound('<h1>Page not found</h1>')
+        else:
+            return HttpResponse('<h1>Page was found</h1>')
+
+由于一些状态码不太常用，所以不是每个状态码都有一个特化的子类。然而，如 :class:`~django.http.HttpResponse` 文档中所说的那样，你也可以向 :class:`~django.http.HttpResponse` 的构造器传递 HTTP 状态码，来创建你想要的任何状态码的返回类。例如::
+
+    from django.http import HttpResponse
+
+    def my_view(request):
+        # ...
+
+        # Return a "created" (201) response code.
+        return HttpResponse(status=201)
+
+由于 404 错误是最常见的 HTTP 错误，所以处理这一错误的方式非常便利。
+
+``Http404`` 异常
+-------------------------
+
+.. class:: django.http.Http404()
+
+当你返回一个像 :class:`~django.http.HttpResponseNotFound` 这样的错误时，它会输出这个错误页面的 HTML 作为结果::
+
+    return HttpResponseNotFound('<h1>Page not found</h1>')
+
+为了便利起见，也因为你的站点有个一致的 404 页面是个好主意，Django 提供了 ``Http404`` 异常。如果你在视图函数中的任何地方抛出 ``Http404`` 异常，Django 都会捕获它，并且带上 HTTP 404 错误码返回你应用的标准错误页面。
+
+像这样::
+
+    from django.http import Http404
+    from django.shortcuts import render
+    from polls.models import Poll
+
+    def detail(request, poll_id):
+        try:
+            p = Poll.objects.get(pk=poll_id)
+        except Poll.DoesNotExist:
+            raise Http404("Poll does not exist")
+        return render(request, 'polls/detail.html', {'poll': p})
+
+为了在 Django 返回 404 时显示自定义的 HTML，你可以创建一个名为 ``404.html`` 的 HTML 模版并把它放在你的模板树的最顶层。这个模板将在 :setting:`DEBUG` 设置为 ``False`` 时生效。
+
+当 :setting:`DEBUG` 为 ``True`` 时，你可以给 ``Http404`` 提供一条消息，它会出现在标准 404 调试模板中。你可以将这些消息用于调试；但他们通常不适用于 404 模板本身。
+
+.. _customizing-error-views:
+
+自定义错误视图
+=======================
+
+Django 中默认的错误视图对于大多数 Web 应用已经足够了，但是如果你需要任何自定义行为，重写它很容易。只要在你的 URLconf 中指定下面的处理器（在其他任何地方设置它们不会有效）。
+
+:func:`~django.views.defaults.page_not_found` 视图被 :data:`~django.conf.urls.handler404` 重写了::
+
+    handler404 = 'mysite.views.my_custom_page_not_found_view'
+
+:func:`~django.views.defaults.server_error` 视图被 :data:`~django.conf.urls.handler500` 重写了::
+
+    handler500 = 'mysite.views.my_custom_error_view'
+
+:func:`~django.views.defaults.permission_denied`  视图被 :data:`~django.conf.urls.handler403` 重写了::
+
+    handler403 = 'mysite.views.my_custom_permission_denied_view'
+
+:func:`~django.views.defaults.bad_request` 视图被 :data:`~django.conf.urls.handler400` 重写了::
+
+    handler400 = 'mysite.views.my_custom_bad_request_view'
+
+.. seealso::
+
+    使用 :setting:`CSRF_FAILURE_VIEW` 设置重写 CSRF 错误视图。

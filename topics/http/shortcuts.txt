@@ -1,0 +1,224 @@
+=========================
+Django 的快捷函数
+=========================
+
+.. module:: django.shortcuts
+   :synopsis:
+       方便的快捷方式，跨越多层的 Django 的 MVC 栈。
+
+.. index:: shortcuts
+
+``django.shortcuts`` 收集了“跨越” 多层 MVC 的辅助函数和类。换句话讲，这些函数/类为了方便，引入了可控的耦合。
+
+``render()``
+============
+
+.. function:: render(request, template_name, context=None, content_type=None, status=None, using=None)
+
+   结合一个给定的模板和一个给定的上下文字典，并返回一个渲染后的 :class:`~django.http.HttpResponse` 对象。
+
+   Django 不提供返回 :class:`~django.template.response.TemplateResponse` 的快捷函数，因为 :class:`~django.template.response.TemplateResponse` 的构造与 :func:`render()` 一样方便。
+
+必选的参数
+------------------
+
+``request``
+    用于生成响应的请求对象。
+
+``template_name``
+    要使用的模板的完整名称或者一个模板名称的序列。如果给定的是一个序列，将会使用第一个存在的模版。参见 :ref:`模版加载文档 <template-loading>` 获得更多关于如何找到模板的信息。
+
+可选的参数
+------------------
+
+``context``
+    添加到模板上下文的一个字典。默认是一个空字典。如果字典中的某个值是可调用的，视图将在渲染模板之前调用它。
+
+``content_type``
+    生成的文档要使用的 MIME 类型。默认为 :setting:`DEFAULT_CONTENT_TYPE` 设置的值。
+
+``status``
+    响应的状态码。默认为 ``200``。
+
+``using``
+    用于加载模板使用的模板引擎的 :setting:`名称 <TEMPLATES-NAME>`。
+
+示例
+-------
+
+下面的示例渲染模板 ``myapp/index.html``，MIME 类型为 :mimetype:`application/xhtml+xml`::
+
+    from django.shortcuts import render
+
+    def my_view(request):
+        # View code here...
+        return render(request, 'myapp/index.html', {
+            'foo': 'bar',
+        }, content_type='application/xhtml+xml')
+
+这个示例等同于::
+
+    from django.http import HttpResponse
+    from django.template import loader
+
+    def my_view(request):
+        # View code here...
+        t = loader.get_template('myapp/index.html')
+        c = {'foo': 'bar'}
+        return HttpResponse(t.render(c, request), content_type='application/xhtml+xml')
+
+``render_to_response()``
+========================
+
+.. function:: render_to_response(template_name, context=None, content_type=None, status=None, using=None)
+
+   该功能先于之前介绍的 :func:`render` 并且工作方式相似，只是它不会让 ``request`` 在响应时可用。这不再推荐，并有可能在未来被废弃。
+
+``redirect()``
+==============
+
+.. function:: redirect(to, permanent=False, *args, **kwargs)
+
+   为传递进来的参数返回 :class:`~django.http.HttpResponseRedirect` 给正确的 URL。
+
+   参数可以是：
+
+   * 一个模型：将调用模型的 :meth:`~django.db.models.Model.get_absolute_url()` 函数。
+
+   * 一个视图，可以带有参数：将使用 :func:`~django.urls.reverse` 来反向解析名称。
+
+   * 一个绝对的或相对的 URL，将原样作为重定向的位置。
+
+   默认返回一个临时的重定向；传递 ``permanent=True`` 可以返回一个永久的重定向。
+
+示例
+--------
+
+你可以用多种方式使用 :func:`redirect` 函数。
+
+1. 通过传递一个对象；将调用 :meth:`~django.db.models.Model.get_absolute_url` 方法来获取重定向的 URL::
+
+        from django.shortcuts import redirect
+
+        def my_view(request):
+            ...
+            object = MyModel.objects.get(...)
+            return redirect(object)
+
+2. 通过传递一个视图的名称，可以带有位置参数和关键字参数；将使用 :func:`~django.urls.reverse` 方法反向解析 URL::
+
+        def my_view(request):
+            ...
+            return redirect('some-view-name', foo='bar')
+
+3. 传递要重定向的一个硬编码的 URL::
+
+        def my_view(request):
+            ...
+            return redirect('/some/url/')
+
+   完整的 URL 也可以::
+
+        def my_view(request):
+            ...
+            return redirect('https://example.com/')
+
+默认情况下，:func:`redirect` 返回一个临时重定向。以上所有的形式都接收一个 ``permanent`` 参数；如果设置为 ``True``，将返回一个永久的重定向::
+
+    def my_view(request):
+        ...
+        object = MyModel.objects.get(...)
+        return redirect(object, permanent=True)
+
+``get_object_or_404()``
+=======================
+
+.. function:: get_object_or_404(klass, *args, **kwargs)
+
+   在一个给定的模型管理器上调用 :meth:`~django.db.models.query.QuerySet.get()`，但是引发 :class:`~django.http.Http404` 而不是模型的 :class:`~django.db.models.Model.DoesNotExist` 异常。
+
+必选的参数
+------------------
+
+``klass``
+    获取该对象的一个 :class:`~django.db.models.Model`、:class:`~django.db.models.Manager` 或 :class:`~django.db.models.query.QuerySet` 实例。
+
+``**kwargs``
+    查询的参数，格式应该可以被 ``get()`` 和 ``filter()`` 接受。
+
+示例
+-------
+
+下面的示例从 ``MyModel`` 中使用主键 1 来获取对象::
+
+    from django.shortcuts import get_object_or_404
+
+    def my_view(request):
+        my_object = get_object_or_404(MyModel, pk=1)
+
+这个示例等同于::
+
+    from django.http import Http404
+
+    def my_view(request):
+        try:
+            my_object = MyModel.objects.get(pk=1)
+        except MyModel.DoesNotExist:
+            raise Http404("No MyModel matches the given query.")
+
+最常见的用法是传递一个 :class:`~django.db.models.Model`，如上所示。然而，你还可以传递一个 :class:`~django.db.models.query.QuerySet` 实例::
+
+    queryset = Book.objects.filter(title__startswith='M')
+    get_object_or_404(queryset, pk=1)
+
+上面的示例有点做作，因为它等同于::
+
+    get_object_or_404(Book, title__startswith='M', pk=1)
+
+但是如果你的 ``queryset`` 来自其它地方，它就会很有用了。
+
+最后你还可以使用一个 :class:`~django.db.models.Manager`。如果你有一个 :ref:`自定义的管理器 <custom-managers>`，它将很有用::
+
+    get_object_or_404(Book.dahl_objects, title='Matilda')
+
+你还可以使用 :class:`关联的 管理器<django.db.models.fields.related.RelatedManager>`::
+
+    author = Author.objects.get(name='Roald Dahl')
+    get_object_or_404(author.book_set, title='Matilda')
+
+注：与 ``get()`` 一样，如果找到多个对象将引发一个 :class:`~django.core.exceptions.MultipleObjectsReturned` 异常。
+
+``get_list_or_404()``
+=====================
+
+.. function:: get_list_or_404(klass, *args, **kwargs)
+
+   返回一个给定模型管理器上 :meth:`~django.db.models.query.QuerySet.filter()` 的结果，并将结果映射为一个列表，如果结果为空则返回 :class:`~django.http.Http404`。
+
+必选的参数
+------------------
+
+``klass``
+    获取该列表的一个 :class:`~django.db.models.Model`、:class:`~django.db.models.Manager` 或 :class:`~django.db.models.query.QuerySet` 实例。
+
+``**kwargs``
+    查寻的参数，格式应该可以被 ``get()`` 和 ``filter()`` 接受。
+
+示例
+-------
+
+下面的示例从 ``MyModel`` 中获取所有发布出来的对象::
+
+    from django.shortcuts import get_list_or_404
+
+    def my_view(request):
+        my_objects = get_list_or_404(MyModel, published=True)
+
+这个示例等同于::
+
+    from django.http import Http404
+
+    def my_view(request):
+        my_objects = list(MyModel.objects.filter(published=True))
+        if not my_objects:
+            raise Http404("No MyModel matches the given query.")

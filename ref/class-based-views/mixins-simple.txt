@@ -1,0 +1,68 @@
+=============
+简单的 Mixin
+=============
+
+``ContextMixin``
+================
+
+.. class:: django.views.generic.base.ContextMixin
+
+    **方法**
+
+    .. method:: get_context_data(**kwargs)
+
+        返回用来表示模板的上下文的字典。传递的关键字参数将组成返回的上下文。示例用法::
+
+            def get_context_data(self, **kwargs):
+                context = super(RandomNumberView, self).get_context_data(**kwargs)
+                context['number'] = random.randrange(1, 100)
+                return context
+
+        所有基于类的通用视图的这个模板上下文都包含一个 ``view`` 变量指向 ``View`` 实例。
+
+        .. admonition:: 在适当的位置使用 ``alters_data``
+
+            注意，将视图实例包含在模板上下文中可能将有潜在危险的方法暴露给模板作者。为了避免在模板中被调用类似这样的方法，可以在这些方法上设置 ``alters_data=True``。更多信息，参见 :ref:`渲染模板上下文 <alters-data-description>` 的文档。
+
+``TemplateResponseMixin``
+=========================
+
+.. class:: django.views.generic.base.TemplateResponseMixin
+
+    根据合适的上下文，提供一种构造 :class:`~django.template.response.TemplateResponse` 的机制。使用的模板可以配置，而且在子类中可以进一步自定义。
+
+    **属性**
+
+    .. attribute:: template_name
+
+        字符串形式的模板名称。如果没有定义 ``template_name`` 将抛出一个 :class:`django.core.exceptions.ImproperlyConfigured` 异常。
+
+    .. attribute:: template_engine
+
+        用于加载模板的模板引擎的 :setting:`名称 <TEMPLATES-NAME>`。``template_engine`` 将作为 ``using`` 关键字参数传递给 ``response_class``。默认值为 ``None``，它告诉 Django 在所有配置的引擎中搜索模板。
+
+    .. attribute:: response_class
+
+        ``render_to_response`` 方法返回的响应类。默认为 :class:`TemplateResponse <django.template.response.TemplateResponse>`。``TemplateResponse`` 实例的模板和上下文可以在后面改动（例如，在 :ref:`模板响应中间件 <template-response-middleware>` 中）。
+
+        如果你需要自定义模板的加载或者自定义上下文对象的实例化，你可以创建一个 ``TemplateResponse`` 的子类并将它赋值给 ``response_class``。
+
+    .. attribute:: content_type
+
+        响应使用的内容类型。``content_type`` 将作为关键字参数传递给 ``response_class``。默认为 ``None`` —— 表示 Django 将使用 :setting:`DEFAULT_CONTENT_TYPE`。
+
+    **方法**
+
+    .. method:: render_to_response(context, **response_kwargs)
+
+        返回一个 ``self.response_class`` 实例。
+
+        提供的任何参数都将传递给响应类。
+
+        调用 :meth:`get_template_names()` 可以获得模板名称的列表，在查找存在的模板时会搜索这个列表。
+
+    .. method:: get_template_names()
+
+        返回模板名称的一个列表，在查找存在的模板时会搜索这个列表。
+
+        如果指定 :attr:`template_name`，默认的实现将返回包含 :attr:`template_name` 的一个列表（如果它指定过）。

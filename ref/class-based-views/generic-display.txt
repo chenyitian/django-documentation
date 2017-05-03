@@ -1,0 +1,158 @@
+=====================
+通用的显示视图
+=====================
+
+下面两个基于类的通用视图用于显示数据。在许多项目中，它们是最常使用的视图。
+
+``DetailView``
+==============
+
+.. class:: django.views.generic.detail.DetailView
+
+    执行这个视图的时候，``self.object`` 将包含视图正在操作的对象。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.detail.SingleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * ``django.views.generic.detail.BaseDetailView``
+    * :class:`django.views.generic.detail.SingleObjectMixin`
+    * :class:`django.views.generic.base.View`
+
+    **方法流程**
+
+    1. :meth:`~django.views.generic.base.View.dispatch()`
+    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    3. :meth:`~django.views.generic.base.TemplateResponseMixin.get_template_names()`
+    4. :meth:`~django.views.generic.detail.SingleObjectMixin.get_slug_field()`
+    5. :meth:`~django.views.generic.detail.SingleObjectMixin.get_queryset()`
+    6. :meth:`~django.views.generic.detail.SingleObjectMixin.get_object()`
+    7. :meth:`~django.views.generic.detail.SingleObjectMixin.get_context_object_name()`
+    8. :meth:`~django.views.generic.detail.SingleObjectMixin.get_context_data()`
+    9. ``get()``
+    10. :meth:`~django.views.generic.base.TemplateResponseMixin.render_to_response()`
+
+    **示例 myapp/views.py**::
+
+        from django.views.generic.detail import DetailView
+        from django.utils import timezone
+
+        from articles.models import Article
+
+        class ArticleDetailView(DetailView):
+
+            model = Article
+
+            def get_context_data(self, **kwargs):
+                context = super(ArticleDetailView, self).get_context_data(**kwargs)
+                context['now'] = timezone.now()
+                return context
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from article.views import ArticleDetailView
+
+        urlpatterns = [
+            url(r'^(?P<slug>[-\w]+)/$', ArticleDetailView.as_view(), name='article-detail'),
+        ]
+
+    **示例 myapp/article_detail.html**:
+
+    .. code-block:: html+django
+
+        <h1>{{ object.headline }}</h1>
+        <p>{{ object.content }}</p>
+        <p>Reporter: {{ object.reporter }}</p>
+        <p>Published: {{ object.pub_date|date }}</p>
+        <p>Date: {{ now|date }}</p>
+
+``ListView``
+============
+
+.. class:: django.views.generic.list.ListView
+
+    表示对象列表的一个页面。
+
+    执行这个视图的时候，``self.object_list`` 将包含视图正在操作的对象列表（通常是一个查询集，但不是必然的）。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.list.MultipleObjectTemplateResponseMixin`
+    * :class:`django.views.generic.base.TemplateResponseMixin`
+    * :class:`django.views.generic.list.BaseListView`
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.base.View`
+
+    **方法流程**
+
+    1. :meth:`~django.views.generic.base.View.dispatch()`
+    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    3. :meth:`~django.views.generic.base.TemplateResponseMixin.get_template_names()`
+    4. :meth:`~django.views.generic.list.MultipleObjectMixin.get_queryset()`
+    5. :meth:`~django.views.generic.list.MultipleObjectMixin.get_context_object_name()`
+    6. :meth:`~django.views.generic.list.MultipleObjectMixin.get_context_data()`
+    7. ``get()``
+    8. :meth:`~django.views.generic.base.TemplateResponseMixin.render_to_response()`
+
+
+    **示例 views.py**::
+
+        from django.views.generic.list import ListView
+        from django.utils import timezone
+
+        from articles.models import Article
+
+        class ArticleListView(ListView):
+
+            model = Article
+
+            def get_context_data(self, **kwargs):
+                context = super(ArticleListView, self).get_context_data(**kwargs)
+                context['now'] = timezone.now()
+                return context
+
+    **示例 myapp/urls.py**::
+
+        from django.conf.urls import url
+
+        from article.views import ArticleListView
+
+        urlpatterns = [
+            url(r'^$', ArticleListView.as_view(), name='article-list'),
+        ]
+
+    **示例 myapp/article_list.html**:
+
+    .. code-block:: html+django
+
+        <h1>Articles</h1>
+        <ul>
+        {% for article in object_list %}
+            <li>{{ article.pub_date|date }} - {{ article.headline }}</li>
+        {% empty %}
+            <li>No articles yet.</li>
+        {% endfor %}
+        </ul>
+
+.. class:: django.views.generic.list.BaseListView
+
+    显示一个对象列表的基础视图。它不是直接使用的，而是作为 :class:`django.views.generic.list.ListView` 的父类或其它表示对象列表的视图的父类。
+
+    **祖先（MRO）**
+
+    该视图从以下视图继承方法和属性：
+
+    * :class:`django.views.generic.list.MultipleObjectMixin`
+    * :class:`django.views.generic.base.View`
+
+    **方法**
+
+    .. method:: get(request, *args, **kwargs)
+
+        添加 ``object_list`` 到上下文中。如果 :attr:`~django.views.generic.list.MultipleObjectMixin.allow_empty` 为 ``True``，则显示一个空的列表。如果 :attr:`~django.views.generic.list.MultipleObjectMixin.allow_empty` 为 ``False``，则抛出一个 404 错误。
